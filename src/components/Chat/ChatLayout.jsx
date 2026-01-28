@@ -54,12 +54,16 @@ export default function ChatLayout() {
     setSelectedConversation(conversation);
   };
 
-  const handleConversationCreated = (newConversation) => {
-    // Thêm conversation mới vào đầu danh sách
-    setConversations(prev => [newConversation, ...prev]);
+  const handleConversationCreated = async (newConversation) => {
+    // Refresh lại toàn bộ danh sách để có đầy đủ thông tin
+    await fetchConversations();
     
-    // Tự động chọn conversation vừa tạo
-    setSelectedConversation(newConversation);
+    // Tìm conversation vừa tạo trong danh sách mới
+    // (vì API response có thể thiếu thông tin user details)
+    setSelectedConversation(prev => {
+      const found = conversations.find(c => c._id === newConversation._id);
+      return found || newConversation;
+    });
   };
 
   const filteredConversations = conversations.filter(conv => {

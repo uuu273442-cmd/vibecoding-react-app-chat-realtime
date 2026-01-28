@@ -3,6 +3,12 @@
 import React from 'react';
 import { User } from 'lucide-react';
 import { conversationListStyles as styles } from '../../styles/chatStyles';
+import { 
+  getConversationName, 
+  getConversationAvatar, 
+  getConversationStatus,
+  formatTime 
+} from '../../utils/chatHelpers';
 
 export default function ConversationList({ conversations, selectedConversation, onConversationClick }) {
   
@@ -14,54 +20,14 @@ export default function ConversationList({ conversations, selectedConversation, 
     );
   }
 
-  const formatTime = (dateString) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diff = now - date;
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-
-    if (minutes < 1) return 'Vừa xong';
-    if (minutes < 60) return `${minutes} phút`;
-    if (hours < 24) return `${hours} giờ`;
-    if (days < 7) return `${days} ngày`;
-    
-    return date.toLocaleDateString('vi-VN');
-  };
-
-  const getOtherParticipant = (conv) => {
-    // Lấy participant không phải owner
-    const other = conv.participants.find(p => p.role !== 'owner');
-    return other ? other.userId : null;
-  };
-
-  const getConversationName = (conv) => {
-    if (conv.type === 'group' && conv.name) {
-      return conv.name;
-    }
-    
-    const other = getOtherParticipant(conv);
-    return other ? other.name : 'Unknown';
-  };
-
-  const getAvatar = (conv) => {
-    const other = getOtherParticipant(conv);
-    return other?.avatar || null;
-  };
-
-  const getStatus = (conv) => {
-    const other = getOtherParticipant(conv);
-    return other?.status || 'offline';
-  };
-
   return (
     <div style={styles.container}>
       {conversations.map((conv) => {
         const isSelected = selectedConversation?._id === conv._id;
         const hasUnread = conv.unreadCount > 0;
-        const status = getStatus(conv);
-        const avatar = getAvatar(conv);
+        const status = getConversationStatus(conv);
+        const avatar = getConversationAvatar(conv);
+        const name = getConversationName(conv);
 
         return (
           <div
@@ -92,7 +58,7 @@ export default function ConversationList({ conversations, selectedConversation, 
                   ...styles.name,
                   ...(hasUnread ? styles.nameUnread : {})
                 }}>
-                  {getConversationName(conv)}
+                  {name}
                 </h4>
                 <span style={styles.time}>
                   {formatTime(conv.updatedAt)}
