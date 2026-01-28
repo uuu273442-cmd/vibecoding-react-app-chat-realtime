@@ -7,7 +7,9 @@ import { getConversations } from '../../services/chatService';
 import { logoutUser } from '../../services/authService';
 import ConversationList from './ConversationList';
 import NewChatModal from './NewChatModal';
+import ChatWindow from './ChatWindow';
 import { chatLayoutStyles as styles } from '../../styles/chatStyles';
+import { getConversationName } from '../../utils/chatHelpers';
 
 export default function ChatLayout() {
   const navigate = useNavigate();
@@ -139,18 +141,7 @@ export default function ChatLayout() {
       {/* Main Chat Area */}
       <div style={styles.chatArea}>
         {selectedConversation ? (
-          <div style={styles.chatPlaceholder}>
-            <MessageCircle size={64} color="#d1d5db" />
-            <h3 style={styles.placeholderTitle}>
-              {selectedConversation.participants
-                .filter(p => p.role !== 'owner')
-                .map(p => p.userId.name)
-                .join(', ')}
-            </h3>
-            <p style={styles.placeholderText}>
-              Chat interface sẽ được làm ở phần tiếp theo
-            </p>
-          </div>
+          <ChatWindow conversation={selectedConversation} />
         ) : (
           <div style={styles.chatPlaceholder}>
             <MessageCircle size={64} color="#d1d5db" />

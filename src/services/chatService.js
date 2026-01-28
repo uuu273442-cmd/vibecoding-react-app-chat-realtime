@@ -121,7 +121,7 @@ export const getMessages = async (conversationId) => {
 };
 
 // Send a message
-export const sendMessage = async (messageData) => {
+export const sendMessage = async (conversationId, content) => {
   try {
     const token = getAccessToken();
     
@@ -135,7 +135,11 @@ export const sendMessage = async (messageData) => {
         ...API_CONFIG.HEADERS,
         'Authorization': `Bearer ${token}`
       },
-      body: JSON.stringify(messageData)
+      body: JSON.stringify({ 
+        conversationId, 
+        content,
+        type: 'text'
+      })
     });
 
     const data = await response.json();
@@ -145,6 +149,34 @@ export const sendMessage = async (messageData) => {
     }
 
     return data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// Mark messages as seen
+export const markMessagesSeen = async (conversationId) => {
+  try {
+    const token = getAccessToken();
+    
+    if (!token) {
+      throw { message: 'No access token found', statusCode: 401 };
+    }
+
+    const response = await fetch(`${API_CONFIG.BASE_URL}${API_ENDPOINTS.CHAT.MARK_SEEN}/${conversationId}`, {
+      method: 'PATCH',
+      headers: {
+        ...API_CONFIG.HEADERS,
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    if (!response.ok) {
+      const data = await response.json();
+      throw data;
+    }
+
+    return { success: true };
   } catch (error) {
     throw error;
   }

@@ -25,8 +25,9 @@ export const API_ENDPOINTS = {
     CONVERSATIONS: '/conversations',
     CREATE_PRIVATE: '/conversations/private',
     LIST_USERS: '/conversations/list-user',
-    MESSAGES: '/chat/messages',
-    SEND: '/chat/send',
+    MESSAGES: '/messages',
+    SEND: '/messages',
+    MARK_SEEN: '/messages/seen',
   }
   // Thêm endpoints khác ở đây
 };
