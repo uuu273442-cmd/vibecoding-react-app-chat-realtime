@@ -22,7 +22,7 @@ export const API_ENDPOINTS = {
     UPDATE: "/user/update",
   },
   CHAT: {
-    CONVERSATIONS: "/chat/conversations",
+    CONVERSATIONS: "/conversations",
     MESSAGES: "/chat/messages",
     SEND: "/chat/send",
   },

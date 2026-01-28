@@ -50,8 +50,7 @@ export default function Login() {
 
       // Chuyển hướng đến trang chat sau 1.5s
       setTimeout(() => {
-        // navigate('/chat'); // Sẽ uncomment khi có trang chat
-        console.log('Sẽ chuyển đến trang chat...');
+        navigate('/chat');
       }, 1500);
 
     } catch (error) {
