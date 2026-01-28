@@ -23,6 +23,8 @@ export const API_ENDPOINTS = {
   },
   CHAT: {
     CONVERSATIONS: "/conversations",
+    CREATE_PRIVATE: "/conversations/private",
+    LIST_USERS: "/conversations/list-user",
     MESSAGES: "/chat/messages",
     SEND: "/chat/send",
   },

@@ -2,10 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MessageCircle, LogOut, Search } from 'lucide-react';
+import { MessageCircle, LogOut, Search, Plus } from 'lucide-react';
 import { getConversations } from '../../services/chatService';
 import { logoutUser } from '../../services/authService';
 import ConversationList from './ConversationList';
+import NewChatModal from './NewChatModal';
 import { chatLayoutStyles as styles } from '../../styles/chatStyles';
 
 export default function ChatLayout() {
@@ -15,6 +16,7 @@ export default function ChatLayout() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
 
   useEffect(() => {
     fetchConversations();
@@ -52,6 +54,14 @@ export default function ChatLayout() {
     setSelectedConversation(conversation);
   };
 
+  const handleConversationCreated = (newConversation) => {
+    // Thêm conversation mới vào đầu danh sách
+    setConversations(prev => [newConversation, ...prev]);
+    
+    // Tự động chọn conversation vừa tạo
+    setSelectedConversation(newConversation);
+  };
+
   const filteredConversations = conversations.filter(conv => {
     if (!searchQuery) return true;
     
@@ -71,9 +81,19 @@ export default function ChatLayout() {
             <MessageCircle size={28} color="#764ba2" />
             <h2 style={styles.appTitle}>Chat App</h2>
           </div>
-          <button onClick={handleLogout} style={styles.logoutButton} title="Đăng xuất">
-            <LogOut size={20} />
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button 
+              onClick={() => setIsNewChatModalOpen(true)} 
+              style={styles.newChatButton}
+              title="Tạo cuộc hội thoại mới"
+            >
+              <Plus size={18} />
+              Mới
+            </button>
+            <button onClick={handleLogout} style={styles.logoutButton} title="Đăng xuất">
+              <LogOut size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Search */}
@@ -137,6 +157,13 @@ export default function ChatLayout() {
           </div>
         )}
       </div>
+
+      {/* New Chat Modal */}
+      <NewChatModal
+        isOpen={isNewChatModalOpen}
+        onClose={() => setIsNewChatModalOpen(false)}
+        onConversationCreated={handleConversationCreated}
+      />
     </div>
   );
 }
