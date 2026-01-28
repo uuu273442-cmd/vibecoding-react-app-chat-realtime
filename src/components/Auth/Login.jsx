@@ -37,9 +37,7 @@ export default function Login() {
     try {
       const data = await loginUser(formData);
       
-      // Lưu access token
-      localStorage.setItem('accessToken', data.accessToken);
-      
+      // Lưu cả access token và refresh token (đã xử lý trong loginUser)
       setSuccessMessage('Đăng nhập thành công! 🎉');
       
       // Reset form

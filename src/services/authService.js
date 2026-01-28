@@ -38,6 +38,44 @@ export const loginUser = async (credentials) => {
       throw data;
     }
 
+    // Lưu cả accessToken và refreshToken
+    localStorage.setItem('accessToken', data.accessToken);
+    localStorage.setItem('refreshToken', data.refreshToken);
+
+    return data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// Refresh access token
+export const refreshAccessToken = async () => {
+  try {
+    const refreshToken = localStorage.getItem('refreshToken');
+    
+    if (!refreshToken) {
+      throw { message: 'No refresh token found', statusCode: 401 };
+    }
+
+    const response = await fetch(`${API_CONFIG.BASE_URL}${API_ENDPOINTS.AUTH.REFRESH_TOKEN}`, {
+      method: 'POST',
+      headers: API_CONFIG.HEADERS,
+      body: JSON.stringify({ refreshToken })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      // RefreshToken hết hạn hoặc không hợp lệ -> xóa tokens
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      throw data;
+    }
+
+    // Lưu tokens mới
+    localStorage.setItem('accessToken', data.accessToken);
+    localStorage.setItem('refreshToken', data.refreshToken);
+
     return data;
   } catch (error) {
     throw error;
@@ -57,18 +95,21 @@ export const logoutUser = async () => {
       }
     });
 
-    // Clear token regardless of response
+    // Clear tokens regardless of response
     localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
 
     if (!response.ok) {
       const data = await response.json();
       throw data;
     }
 
-    return { success: true };
+    const data = await response.json();
+    return data;
   } catch (error) {
-    // Still remove token even if API call fails
+    // Still remove tokens even if API call fails
     localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
     throw error;
   }
 };
@@ -81,4 +122,9 @@ export const isAuthenticated = () => {
 // Get access token
 export const getAccessToken = () => {
   return localStorage.getItem('accessToken');
+};
+
+// Get refresh token
+export const getRefreshToken = () => {
+  return localStorage.getItem('refreshToken');
 };

@@ -1,13 +1,19 @@
 // Đường dẫn: src/App.jsx
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Register from './components/Auth/Register';
 import Login from './components/Auth/Login';
 import ChatLayout from './components/Chat/ChatLayout';
 import ProtectedRoute from './components/ProtectedRoute';
+import { setupAutoRefresh } from './utils/apiInterceptor';
 
 function App() {
+  useEffect(() => {
+    // Setup automatic token refresh
+    setupAutoRefresh();
+  }, []);
+
   return (
     <BrowserRouter>
       <Routes>
