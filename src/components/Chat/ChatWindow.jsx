@@ -63,14 +63,33 @@ export default function ChatWindow({ conversation }) {
     try {
       const newMessage = await sendMessage(conversation._id, content);
       
+      // API trả về message chưa có full senderId object, cần thêm thông tin
+      const currentUser = {
+        _id: currentUserId,
+        name: 'Bạn', // Tạm thời, sẽ update sau
+        avatar: null
+      };
+      
+      const messageWithSender = {
+        ...newMessage,
+        senderId: currentUser
+      };
+      
       // Add new message to list
-      setMessages(prev => [...prev, newMessage]);
+      setMessages(prev => [...prev, messageWithSender]);
       
       // Clear input
       setInputMessage('');
     } catch (error) {
       console.error('Send message error:', error);
-      alert('Không thể gửi tin nhắn. Vui lòng thử lại!');
+      
+      if (error.statusCode === 403) {
+        alert('Bạn không có quyền gửi tin nhắn trong cuộc hội thoại này!');
+      } else if (error.statusCode === 401) {
+        alert('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại!');
+      } else {
+        alert('Không thể gửi tin nhắn. Vui lòng thử lại!');
+      }
     } finally {
       setIsSending(false);
     }
