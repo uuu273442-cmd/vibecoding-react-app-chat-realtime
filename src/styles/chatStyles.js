@@ -659,6 +659,12 @@ export const chatWindowStyles = {
     gap: '2px',
   },
 
+  statusContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+  },
+
   userName: {
     fontSize: '16px',
     fontWeight: '600',
@@ -668,8 +674,14 @@ export const chatWindowStyles = {
 
   userStatus: {
     fontSize: '12px',
-    color: '#10b981',
     margin: 0,
+  },
+
+  typingStatus: {
+    fontSize: '12px',
+    color: '#764ba2',
+    margin: 0,
+    fontStyle: 'italic',
   },
 
   moreButton: {
@@ -789,6 +801,39 @@ export const chatWindowStyles = {
   sendButtonDisabled: {
     opacity: 0.5,
     cursor: 'not-allowed',
+  },
+
+  // Typing Indicator (in chat area)
+  typingIndicatorContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '8px 0',
+    marginLeft: '36px', // Align with other messages
+  },
+
+  typingBubble: {
+    backgroundColor: '#f3f4f6',
+    borderRadius: '16px',
+    padding: '10px 14px',
+    display: 'flex',
+    gap: '4px',
+    alignItems: 'center',
+  },
+
+  typingDot: {
+    width: '6px',
+    height: '6px',
+    backgroundColor: '#9ca3af',
+    borderRadius: '50%',
+    animation: 'typing 1.4s infinite',
+  },
+
+  typingText: {
+    fontSize: '12px',
+    color: '#6b7280',
+    margin: 0,
+    fontStyle: 'italic',
   },
 };
 

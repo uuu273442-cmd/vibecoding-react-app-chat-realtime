@@ -9,7 +9,7 @@ import ConversationList from './ConversationList';
 import NewChatModal from './NewChatModal';
 import ChatWindow from './ChatWindow';
 import { chatLayoutStyles as styles } from '../../styles/chatStyles';
-import { getConversationName } from '../../utils/chatHelpers';
+import socketService from '../../services/socketService';
 
 export default function ChatLayout() {
   const navigate = useNavigate();
@@ -21,7 +21,15 @@ export default function ChatLayout() {
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
 
   useEffect(() => {
+    // Connect to socket when component mounts
+    socketService.connect();
+    
     fetchConversations();
+
+    // Cleanup on unmount
+    return () => {
+      socketService.disconnect();
+    };
   }, []);
 
   const fetchConversations = async () => {

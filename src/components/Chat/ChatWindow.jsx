@@ -2,10 +2,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Send, MoreVertical } from 'lucide-react';
-import { getMessages, sendMessage, markMessagesSeen } from '../../services/chatService';
+import { getMessages, sendMessage as sendMessageAPI, markMessagesSeen } from '../../services/chatService';
 import { getConversationName, getConversationStatus, getConversationAvatar, getCurrentUserId } from '../../utils/chatHelpers';
 import { chatWindowStyles as styles } from '../../styles/chatStyles';
 import MessageBubble from './MessageBubble';
+import socketService from '../../services/socketService';
 
 export default function ChatWindow({ conversation }) {
   const [messages, setMessages] = useState([]);
@@ -13,14 +14,35 @@ export default function ChatWindow({ conversation }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState('');
+  const [typingUsers, setTypingUsers] = useState(new Set());
   const messagesEndRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
   const currentUserId = getCurrentUserId();
 
   useEffect(() => {
     if (conversation) {
       fetchMessages();
+      
+      // Join conversation room
+      socketService.joinConversation(conversation._id);
+      
+      // Listen for new messages
+      socketService.on('new_message', handleNewMessage);
+      
+      // Listen for typing indicators
+      socketService.on('user_typing', handleUserTyping);
+      socketService.on('user_stopped_typing', handleUserStoppedTyping);
+      
+      // Cleanup on unmount or conversation change
+      return () => {
+        socketService.leaveConversation(conversation._id);
+        socketService.off('new_message', handleNewMessage);
+        socketService.off('user_typing', handleUserTyping);
+        socketService.off('user_stopped_typing', handleUserStoppedTyping);
+        setTypingUsers(new Set()); // Clear typing users
+      };
     }
-  }, [conversation?._id]);
+  }, [conversation?._id]); // Only re-run when conversation ID changes
 
   useEffect(() => {
     // Auto scroll to bottom when messages change
@@ -49,6 +71,45 @@ export default function ChatWindow({ conversation }) {
     }
   };
 
+  const handleNewMessage = (message) => {
+    console.log('📩 New message received via socket:', message);
+    console.log('Current conversation:', conversation._id);
+    console.log('Message conversation:', message.conversationId);
+    
+    // Only add if message belongs to current conversation
+    if (message.conversationId !== conversation._id) {
+      console.log('⚠️ Message not for current conversation, ignoring');
+      return;
+    }
+    
+    // Check if message already exists (avoid duplicates)
+    setMessages(prev => {
+      const exists = prev.some(m => m._id === message._id);
+      if (exists) {
+        console.log('⚠️ Message already exists, skipping');
+        return prev;
+      }
+      console.log('✅ Adding new message to list');
+      return [...prev, message];
+    });
+  };
+
+  const handleUserTyping = (data) => {
+    if (data.conversationId === conversation._id && data.userId !== currentUserId) {
+      setTypingUsers(prev => new Set(prev).add(data.userId));
+    }
+  };
+
+  const handleUserStoppedTyping = (data) => {
+    if (data.conversationId === conversation._id) {
+      setTypingUsers(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(data.userId);
+        return newSet;
+      });
+    }
+  };
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -61,37 +122,44 @@ export default function ChatWindow({ conversation }) {
     setIsSending(true);
     
     try {
-      const newMessage = await sendMessage(conversation._id, content);
+      // Gửi message qua Socket (KHÔNG dùng REST API)
+      socketService.sendMessage(conversation._id, content);
       
-      // API trả về message chưa có full senderId object, cần thêm thông tin
-      const currentUser = {
-        _id: currentUserId,
-        name: 'Bạn', // Tạm thời, sẽ update sau
-        avatar: null
-      };
-      
-      const messageWithSender = {
-        ...newMessage,
-        senderId: currentUser
-      };
-      
-      // Add new message to list
-      setMessages(prev => [...prev, messageWithSender]);
-      
-      // Clear input
+      // Clear input ngay
       setInputMessage('');
+      
+      // Stop typing indicator
+      socketService.stopTyping(conversation._id);
+      
+      // Message sẽ được nhận qua event 'new_message'
+      // Không cần thêm vào state ở đây
+      
     } catch (error) {
       console.error('Send message error:', error);
-      
-      if (error.statusCode === 403) {
-        alert('Bạn không có quyền gửi tin nhắn trong cuộc hội thoại này!');
-      } else if (error.statusCode === 401) {
-        alert('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại!');
-      } else {
-        alert('Không thể gửi tin nhắn. Vui lòng thử lại!');
-      }
+      alert('Không thể gửi tin nhắn. Vui lòng thử lại!');
     } finally {
       setIsSending(false);
+    }
+  };
+
+  const handleInputChange = (e) => {
+    setInputMessage(e.target.value);
+    
+    // Typing indicator
+    if (e.target.value.trim()) {
+      socketService.startTyping(conversation._id);
+      
+      // Clear previous timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      
+      // Stop typing after 2 seconds of inactivity
+      typingTimeoutRef.current = setTimeout(() => {
+        socketService.stopTyping(conversation._id);
+      }, 2000);
+    } else {
+      socketService.stopTyping(conversation._id);
     }
   };
 
@@ -130,7 +198,10 @@ export default function ChatWindow({ conversation }) {
           {/* User Info */}
           <div style={styles.userInfo}>
             <h3 style={styles.userName}>{name}</h3>
-            <p style={styles.userStatus}>
+            <p style={{
+              ...styles.userStatus,
+              color: status === 'online' ? '#10b981' : '#6b7280'
+            }}>
               {status === 'online' ? 'Đang hoạt động' : 'Không hoạt động'}
             </p>
           </div>
@@ -171,6 +242,19 @@ export default function ChatWindow({ conversation }) {
                 }
               />
             ))}
+            
+            {/* Typing Indicator */}
+            {typingUsers.size > 0 && (
+              <div style={styles.typingIndicatorContainer}>
+                <div style={styles.typingBubble}>
+                  <span style={styles.typingDot}></span>
+                  <span style={styles.typingDot}></span>
+                  <span style={styles.typingDot}></span>
+                </div>
+                <p style={styles.typingText}>{name} đang nhập...</p>
+              </div>
+            )}
+            
             <div ref={messagesEndRef} />
           </>
         )}
@@ -182,7 +266,7 @@ export default function ChatWindow({ conversation }) {
           type="text"
           placeholder="Nhập tin nhắn..."
           value={inputMessage}
-          onChange={(e) => setInputMessage(e.target.value)}
+          onChange={handleInputChange}
           onKeyPress={handleKeyPress}
           style={styles.input}
           disabled={isSending}
