@@ -5,6 +5,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Register from './components/Auth/Register';
 import Login from './components/Auth/Login';
 import ChatLayout from './components/Chat/ChatLayout';
+import FriendsPage from './components/Friends/FriendsPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { setupAutoRefresh } from './utils/apiInterceptor';
 
@@ -24,12 +25,21 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         
-        {/* Protected Chat routes - chỉ cho phép user đã login */}
+        {/* Protected routes - chỉ cho phép user đã login */}
         <Route 
           path="/chat" 
           element={
             <ProtectedRoute>
               <ChatLayout />
+            </ProtectedRoute>
+          } 
+        />
+        
+        <Route 
+          path="/friends" 
+          element={
+            <ProtectedRoute>
+              <FriendsPage />
             </ProtectedRoute>
           } 
         />

@@ -28,6 +28,13 @@ export const API_ENDPOINTS = {
     MESSAGES: '/messages', // GET /messages/:conversationId
     SEND_MESSAGE: '/messages', // POST /messages/:conversationId
     MARK_SEEN: '/messages', // PATCH /messages/:conversationId/seen
+  },
+  FRIENDS: {
+    SEND_REQUEST: '/friends/request',
+    UPDATE_REQUEST: '/friends/request', // PATCH /friends/request/:id
+    GET_REQUESTS: '/friends/requests',
+    GET_FRIENDS: '/friends',
+    REMOVE_FRIEND: '/friends', // DELETE /friends/:id
   }
   // Thêm endpoints khác ở đây
 };
