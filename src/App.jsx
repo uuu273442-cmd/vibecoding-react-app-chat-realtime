@@ -6,6 +6,7 @@ import Register from './components/Auth/Register';
 import Login from './components/Auth/Login';
 import ChatLayout from './components/Chat/ChatLayout';
 import FriendsPage from './components/Friends/FriendsPage';
+import MainLayout from './components/Layout/MainLayout';
 import ProtectedRoute from './components/ProtectedRoute';
 import { setupAutoRefresh } from './utils/apiInterceptor';
 
@@ -25,12 +26,14 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         
-        {/* Protected routes - chỉ cho phép user đã login */}
+        {/* Protected routes với MainLayout (sidebar) */}
         <Route 
           path="/chat" 
           element={
             <ProtectedRoute>
-              <ChatLayout />
+              <MainLayout>
+                <ChatLayout />
+              </MainLayout>
             </ProtectedRoute>
           } 
         />
@@ -39,7 +42,9 @@ function App() {
           path="/friends" 
           element={
             <ProtectedRoute>
-              <FriendsPage />
+              <MainLayout>
+                <FriendsPage />
+              </MainLayout>
             </ProtectedRoute>
           } 
         />

@@ -1,10 +1,8 @@
 // Đường dẫn: src/components/Chat/ChatLayout.jsx
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { MessageCircle, LogOut, Search, Plus } from 'lucide-react';
+import { MessageCircle, Search, Plus } from 'lucide-react';
 import { getConversations } from '../../services/chatService';
-import { logoutUser } from '../../services/authService';
 import ConversationList from './ConversationList';
 import NewChatModal from './NewChatModal';
 import ChatWindow from './ChatWindow';
@@ -12,7 +10,6 @@ import { chatLayoutStyles as styles } from '../../styles/chatStyles';
 import socketService from '../../services/socketService';
 
 export default function ChatLayout() {
-  const navigate = useNavigate();
   const [conversations, setConversations] = useState([]);
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -40,23 +37,13 @@ export default function ChatLayout() {
       setConversations(data);
     } catch (error) {
       if (error.statusCode === 401) {
-        // Token hết hạn hoặc không hợp lệ
-        handleLogout();
+        // Token hết hạn - không cần logout ở đây vì MainLayout sẽ handle
+        setError('Phiên đăng nhập hết hạn');
       } else {
         setError('Không thể tải danh sách hội thoại');
       }
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await logoutUser();
-    } catch (error) {
-      console.error('Logout error:', error);
-    } finally {
-      navigate('/login');
     }
   };
 
@@ -93,21 +80,15 @@ export default function ChatLayout() {
         <div style={styles.sidebarHeader}>
           <div style={styles.logoSection}>
             <MessageCircle size={28} color="#764ba2" />
-            <h2 style={styles.appTitle}>Chat App</h2>
+            <h2 style={styles.appTitle}>Tin nhắn</h2>
           </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button 
-              onClick={() => setIsNewChatModalOpen(true)} 
-              style={styles.newChatButton}
-              title="Tạo cuộc hội thoại mới"
-            >
-              <Plus size={18} />
-              Mới
-            </button>
-            <button onClick={handleLogout} style={styles.logoutButton} title="Đăng xuất">
-              <LogOut size={20} />
-            </button>
-          </div>
+          <button 
+            onClick={() => setIsNewChatModalOpen(true)} 
+            style={styles.newChatButton}
+            title="Tạo cuộc hội thoại mới"
+          >
+            <Plus size={18} />
+          </button>
         </div>
 
         {/* Search */}
