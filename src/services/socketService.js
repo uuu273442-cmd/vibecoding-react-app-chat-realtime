@@ -77,9 +77,6 @@ class SocketService {
 
     console.log('📥 Joining conversation:', conversationId);
     this.socket.emit('join_conversation', { conversationId });
-    
-    // Also join with prefix (if backend uses room:conversationId)
-    // this.socket.emit('join_conversation', { conversationId: `room:${conversationId}` });
   }
 
   // Leave conversation room
@@ -111,6 +108,38 @@ class SocketService {
     if (!this.socket) return;
     this.socket.emit('typing_stop', { conversationId });
   }
+
+  // ============ FRIEND NOTIFICATIONS ============
+  
+  // Listen to friend request received event
+  onFriendRequestReceived(callback) {
+    this.on('friend_request_received', callback);
+  }
+
+  // Listen to friend request accepted event
+  onFriendRequestAccepted(callback) {
+    this.on('friend_request_accepted', callback);
+  }
+
+  // Listen to friend request rejected event
+  onFriendRequestRejected(callback) {
+    this.on('friend_request_rejected', callback);
+  }
+
+  // Remove friend notification listeners
+  offFriendRequestReceived(callback) {
+    this.off('friend_request_received', callback);
+  }
+
+  offFriendRequestAccepted(callback) {
+    this.off('friend_request_accepted', callback);
+  }
+
+  offFriendRequestRejected(callback) {
+    this.off('friend_request_rejected', callback);
+  }
+
+  // ==============================================
 
   // Listen to events
   on(event, callback) {

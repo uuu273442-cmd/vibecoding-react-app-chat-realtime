@@ -71,6 +71,34 @@ export const mainLayoutStyles = {
     fontWeight: '500',
   },
 
+  // Icon wrapper for badge
+  iconWrapper: {
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Badge for notifications
+  badge: {
+    position: 'absolute',
+    top: '-6px',
+    right: '-8px',
+    backgroundColor: '#ef4444',
+    color: 'white',
+    fontSize: '10px',
+    fontWeight: '700',
+    padding: '2px 5px',
+    borderRadius: '10px',
+    minWidth: '18px',
+    height: '18px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: '2px solid #1f2937',
+    boxShadow: '0 2px 8px rgba(239, 68, 68, 0.4)',
+  },
+
   // Footer
   sidebarFooter: {
     width: '100%',

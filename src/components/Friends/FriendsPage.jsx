@@ -1,22 +1,129 @@
 // Đường dẫn: src/components/Friends/FriendsPage.jsx
 
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Users, UserPlus, Clock, Check, X } from 'lucide-react';
 import { getFriends, getFriendRequests, updateFriendRequest, removeFriend } from '../../services/friendsService';
 import { friendsPageStyles as styles } from '../../styles/friendsStyles';
 import AddFriendModal from './AddFriendModal';
+import ToastNotification, { useToast } from '../Shared/ToastNotification';
+import socketService from '../../services/socketService';
 
 export default function FriendsPage() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'requests'
   const [friends, setFriends] = useState([]);
   const [requests, setRequests] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  
+  // Toast notifications
+  const { toasts, showToast, removeToast } = useToast();
 
   useEffect(() => {
     fetchData();
+    
+    // Setup socket listeners
+    setupSocketListeners();
+    
+    // Cleanup on unmount
+    return () => {
+      cleanupSocketListeners();
+    };
   }, []);
+
+  const setupSocketListeners = () => {
+    console.log('🔔 Setting up friend notification listeners...');
+    
+    // Event 1: Nhận friend request mới
+    socketService.onFriendRequestReceived(handleFriendRequestReceived);
+    
+    // Event 2: Request được accept
+    socketService.onFriendRequestAccepted(handleFriendRequestAccepted);
+    
+    // Event 3: Request bị reject
+    socketService.onFriendRequestRejected(handleFriendRequestRejected);
+  };
+
+  const cleanupSocketListeners = () => {
+    console.log('🧹 Cleaning up friend notification listeners...');
+    socketService.offFriendRequestReceived(handleFriendRequestReceived);
+    socketService.offFriendRequestAccepted(handleFriendRequestAccepted);
+    socketService.offFriendRequestRejected(handleFriendRequestRejected);
+  };
+
+  // ============ SOCKET EVENT HANDLERS ============
+
+  const handleFriendRequestReceived = (data) => {
+    console.log('🔔 Friend request received:', data);
+    
+    // Add to requests list
+    setRequests(prev => [data, ...prev]);
+    
+    // Show toast notification
+    showToast({
+      type: 'friend_request_received',
+      title: 'Lời mời kết bạn mới',
+      message: `${data.from.name} muốn kết bạn với bạn`,
+    });
+
+    // Play notification sound (optional)
+    playNotificationSound();
+  };
+
+  const handleFriendRequestAccepted = (data) => {
+    console.log('✅ Friend request accepted:', data);
+    
+    // Add to friends list
+    setFriends(prev => [data.user, ...prev]);
+    
+    // Show toast notification
+    showToast({
+      type: 'friend_request_accepted',
+      title: 'Đã chấp nhận lời mời',
+      message: `${data.user.name} đã chấp nhận lời mời kết bạn của bạn`,
+    });
+
+    // Play notification sound (optional)
+    playNotificationSound();
+  };
+
+  const handleFriendRequestRejected = (data) => {
+    console.log('❌ Friend request rejected:', data);
+    
+    // Show toast notification
+    showToast({
+      type: 'friend_request_rejected',
+      title: 'Lời mời bị từ chối',
+      message: `${data.rejectedBy.name} đã từ chối lời mời kết bạn của bạn`,
+    });
+  };
+
+  // ===============================================
+
+  const playNotificationSound = () => {
+    // Simple notification sound using Web Audio API
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.value = 800;
+      oscillator.type = 'sine';
+      
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.1);
+    } catch (error) {
+      console.log('Could not play notification sound:', error);
+    }
+  };
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -51,7 +158,11 @@ export default function FriendsPage() {
         setFriends(prev => [...prev, acceptedRequest.from]);
       }
       
-      alert('Đã chấp nhận lời mời kết bạn!');
+      showToast({
+        type: 'friend_request_accepted',
+        title: 'Thành công',
+        message: 'Đã chấp nhận lời mời kết bạn!',
+      });
     } catch (error) {
       console.error('Accept request error:', error);
       alert('Không thể chấp nhận lời mời');
@@ -65,7 +176,11 @@ export default function FriendsPage() {
       // Remove from requests
       setRequests(prev => prev.filter(r => r._id !== requestId));
       
-      alert('Đã từ chối lời mời kết bạn');
+      showToast({
+        type: 'friend_request_rejected',
+        title: 'Đã từ chối',
+        message: 'Đã từ chối lời mời kết bạn',
+      });
     } catch (error) {
       console.error('Reject request error:', error);
       alert('Không thể từ chối lời mời');
@@ -83,7 +198,11 @@ export default function FriendsPage() {
       // Remove from list
       setFriends(prev => prev.filter(f => f._id !== friendId));
       
-      alert('Đã xóa bạn bè');
+      showToast({
+        type: 'friend_request_rejected',
+        title: 'Đã xóa',
+        message: `Đã xóa ${friendName} khỏi danh sách bạn bè`,
+      });
     } catch (error) {
       console.error('Remove friend error:', error);
       
@@ -96,12 +215,30 @@ export default function FriendsPage() {
   };
 
   const handleFriendRequestSent = () => {
-    alert('Đã gửi lời mời kết bạn!');
+    showToast({
+      type: 'friend_request_received',
+      title: 'Thành công',
+      message: 'Đã gửi lời mời kết bạn!',
+    });
     setIsAddModalOpen(false);
+  };
+
+  const handleToastClick = (toast) => {
+    // Navigate to requests tab when clicking on notification
+    if (toast.type === 'friend_request_received') {
+      setActiveTab('requests');
+    }
   };
 
   return (
     <div style={styles.container}>
+      {/* Toast Notifications */}
+      <ToastNotification
+        toasts={toasts}
+        onClose={removeToast}
+        onClick={handleToastClick}
+      />
+
       {/* Header */}
       <div style={styles.header}>
         <h1 style={styles.title}>Bạn bè</h1>

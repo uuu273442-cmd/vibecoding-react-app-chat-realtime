@@ -1,14 +1,61 @@
 // Đường dẫn: src/components/Layout/MainLayout.jsx
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { MessageCircle, Users, LogOut } from 'lucide-react';
 import { logoutUser } from '../../services/authService';
+import { getFriendRequests } from '../../services/friendsService';
 import { mainLayoutStyles as styles } from '../../styles/layoutStyles';
+import socketService from '../../services/socketService';
 
 export default function MainLayout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const [friendRequestsCount, setFriendRequestsCount] = useState(0);
+
+  useEffect(() => {
+    // Fetch initial friend requests count
+    fetchFriendRequestsCount();
+
+    // Setup socket listeners for real-time updates
+    setupSocketListeners();
+
+    return () => {
+      cleanupSocketListeners();
+    };
+  }, []);
+
+  const fetchFriendRequestsCount = async () => {
+    try {
+      const requests = await getFriendRequests();
+      setFriendRequestsCount(requests.length);
+    } catch (error) {
+      console.error('Error fetching friend requests:', error);
+    }
+  };
+
+  const setupSocketListeners = () => {
+    // Listen for new friend requests
+    socketService.onFriendRequestReceived((data) => {
+      setFriendRequestsCount(prev => prev + 1);
+    });
+
+    // Listen for accepted/rejected requests (decrease count if you're the receiver)
+    socketService.onFriendRequestAccepted((data) => {
+      // If this user was the one who sent the request, no need to change count
+      // Count only tracks incoming requests
+    });
+
+    socketService.onFriendRequestRejected((data) => {
+      // Same as above
+    });
+  };
+
+  const cleanupSocketListeners = () => {
+    socketService.removeAllListeners('friend_request_received');
+    socketService.removeAllListeners('friend_request_accepted');
+    socketService.removeAllListeners('friend_request_rejected');
+  };
 
   const handleLogout = async () => {
     try {
@@ -20,16 +67,27 @@ export default function MainLayout({ children }) {
     }
   };
 
+  const handleNavClick = (path) => {
+    navigate(path);
+    
+    // Reset badge count when navigating to Friends page
+    if (path === '/friends') {
+      setFriendRequestsCount(0);
+    }
+  };
+
   const navItems = [
     {
       icon: MessageCircle,
       label: 'Chat',
       path: '/chat',
+      badge: 0,
     },
     {
       icon: Users,
       label: 'Bạn bè',
       path: '/friends',
+      badge: friendRequestsCount,
     },
   ];
 
@@ -53,14 +111,22 @@ export default function MainLayout({ children }) {
             return (
               <button
                 key={item.path}
-                onClick={() => navigate(item.path)}
+                onClick={() => handleNavClick(item.path)}
                 style={{
                   ...styles.navItem,
                   ...(isActive ? styles.navItemActive : {})
                 }}
                 title={item.label}
               >
-                <Icon size={24} />
+                {/* Icon with badge */}
+                <div style={styles.iconWrapper}>
+                  <Icon size={24} />
+                  {item.badge > 0 && (
+                    <div style={styles.badge}>
+                      {item.badge > 99 ? '99+' : item.badge}
+                    </div>
+                  )}
+                </div>
                 <span style={styles.navLabel}>{item.label}</span>
               </button>
             );
