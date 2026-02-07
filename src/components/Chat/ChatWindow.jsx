@@ -1,5 +1,5 @@
 // Đường dẫn: src/components/Chat/ChatWindow.jsx
-// CẬP NHẬT: Tích hợp Message Reactions, Reply, Edit, Delete, Forward
+// CẬP NHẬT LẦN 2: Sync với backend - unreact API, message_seen event
 
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Send, MoreVertical } from 'lucide-react';
@@ -7,6 +7,7 @@ import {
   getMessages, 
   markMessagesSeen,
   addReaction,
+  removeReaction, // NEW: Separate unreact API
   sendMessageWithReply,
   editMessage as editMessageAPI,
   deleteMessage as deleteMessageAPI,
@@ -60,6 +61,7 @@ export default function ChatWindow({ conversation }) {
       socketService.on('message_edited', handleMessageEdited);
       socketService.on('message_deleted', handleMessageDeleted);
       socketService.on('message_forwarded', handleMessageForwarded);
+      socketService.on('message_seen', handleMessageSeen); // NEW
       socketService.on('user_typing', handleUserTyping);
       socketService.on('user_stopped_typing', handleUserStoppedTyping);
       
@@ -71,6 +73,7 @@ export default function ChatWindow({ conversation }) {
         socketService.off('message_edited', handleMessageEdited);
         socketService.off('message_deleted', handleMessageDeleted);
         socketService.off('message_forwarded', handleMessageForwarded);
+        socketService.off('message_seen', handleMessageSeen);
         socketService.off('user_typing', handleUserTyping);
         socketService.off('user_stopped_typing', handleUserStoppedTyping);
         setTypingUsers(new Set());
@@ -114,16 +117,26 @@ export default function ChatWindow({ conversation }) {
   // ========== SOCKET EVENT HANDLERS ==========
 
   const handleNewMessage = (message) => {
-    if (message.conversationId !== conversation._id) return;
+    console.log('📩 New message received:', message);
+    
+    if (message.conversationId !== conversation._id) {
+      console.log('⚠️ Message not for current conversation');
+      return;
+    }
     
     setMessages(prev => {
       const exists = prev.some(m => m._id === message._id);
-      if (exists) return prev;
+      if (exists) {
+        console.log('⚠️ Message already exists');
+        return prev;
+      }
+      console.log('✅ Adding new message');
       return [...prev, message];
     });
   };
 
   const handleMessageReacted = (data) => {
+    console.log('👍 Message reacted:', data);
     const { messageId, userId, emoji, action } = data;
     
     setMessages(prev => prev.map(msg => {
@@ -136,9 +149,18 @@ export default function ChatWindow({ conversation }) {
         updatedReactions.push({ userId, emoji });
       } else if (action === 'remove') {
         // Remove reaction
-        updatedReactions = updatedReactions.filter(
-          r => !(r.userId === userId && r.emoji === emoji)
-        );
+        // Backend gửi emoji: null hoặc emoji cụ thể
+        if (emoji) {
+          // Remove specific emoji
+          updatedReactions = updatedReactions.filter(
+            r => !(r.userId === userId && r.emoji === emoji)
+          );
+        } else {
+          // Remove all reactions của user này
+          updatedReactions = updatedReactions.filter(
+            r => r.userId !== userId
+          );
+        }
       }
       
       return { ...msg, reactions: updatedReactions };
@@ -146,12 +168,14 @@ export default function ChatWindow({ conversation }) {
   };
 
   const handleMessageEdited = (updatedMessage) => {
+    console.log('✏️ Message edited:', updatedMessage);
     setMessages(prev => prev.map(msg => 
       msg._id === updatedMessage._id ? updatedMessage : msg
     ));
   };
 
   const handleMessageDeleted = (data) => {
+    console.log('🗑️ Message deleted:', data);
     const { messageId, scope, deletedBy } = data;
     
     setMessages(prev => prev.map(msg => {
@@ -164,7 +188,7 @@ export default function ChatWindow({ conversation }) {
           isDeleted: true
         };
       } else {
-        // scope === 'self' - hide for specific user
+        // scope === 'self'
         if (deletedBy === currentUserId) {
           return {
             ...msg,
@@ -178,8 +202,30 @@ export default function ChatWindow({ conversation }) {
   };
 
   const handleMessageForwarded = (message) => {
+    console.log('➡️ Message forwarded:', message);
     if (message.conversationId !== conversation._id) return;
     handleNewMessage(message);
+  };
+
+  // NEW: Handle message seen event
+  const handleMessageSeen = (data) => {
+    console.log('👁️ Message seen:', data);
+    const { conversationId, userId, seenAt } = data;
+    
+    if (conversationId !== conversation._id) return;
+    if (userId === currentUserId) return; // Don't update for own seen
+    
+    // Update seenBy for all messages
+    setMessages(prev => prev.map(msg => {
+      // Only update if message is from current user and not yet seen by this userId
+      if (msg.senderId._id === currentUserId && !msg.seenBy?.includes(userId)) {
+        return {
+          ...msg,
+          seenBy: [...(msg.seenBy || []), userId]
+        };
+      }
+      return msg;
+    }));
   };
 
   const handleUserTyping = (data) => {
@@ -207,9 +253,9 @@ export default function ChatWindow({ conversation }) {
     setIsSending(true);
     
     try {
-      // Send with optional reply
+      // Backend đã tự emit socket, không cần emit từ client nữa
       const replyToId = replyTo?._id || null;
-      socketService.sendMessage(conversation._id, content, replyToId);
+      await sendMessageWithReply(conversation._id, content, replyToId);
       
       // Clear input & reply
       setInputMessage('');
@@ -217,6 +263,8 @@ export default function ChatWindow({ conversation }) {
       
       // Stop typing indicator
       socketService.stopTyping(conversation._id);
+      
+      // Socket event 'new_message' sẽ tự động update UI
       
     } catch (error) {
       console.error('Send message error:', error);
@@ -229,18 +277,28 @@ export default function ChatWindow({ conversation }) {
   const handleAddReaction = async (messageId, emoji) => {
     try {
       await addReaction(conversation._id, messageId, emoji);
-      // Socket event will update the UI
+      // Socket event 'message_reacted' sẽ update UI
     } catch (error) {
       console.error('Add reaction failed:', error);
+      if (error.statusCode === 409) {
+        alert('Tin nhắn không trong cuộc hội thoại này');
+      }
     }
   };
 
   const handleRemoveReaction = async (messageId, emoji) => {
     try {
-      // Same endpoint toggles reaction
-      await addReaction(conversation._id, messageId, emoji);
+      // NEW: Use separate unreact API
+      await removeReaction(conversation._id, messageId, emoji);
+      // Socket event 'message_reacted' với action: 'remove' sẽ update UI
     } catch (error) {
       console.error('Remove reaction failed:', error);
+      if (error.statusCode === 404) {
+        // Reaction not found - already removed
+        console.log('Reaction already removed');
+      } else if (error.statusCode === 409) {
+        alert('Tin nhắn không trong cuộc hội thoại này');
+      }
     }
   };
 
@@ -261,10 +319,18 @@ export default function ChatWindow({ conversation }) {
     try {
       await editMessageAPI(conversation._id, messageId, newContent);
       setEditingMessage(null);
-      // Socket event will update the UI
+      // Socket event 'message_edited' sẽ update UI
     } catch (error) {
       console.error('Edit message failed:', error);
-      alert(error.message || 'Không thể sửa tin nhắn');
+      if (error.statusCode === 403) {
+        alert('Bạn không có quyền sửa tin nhắn này');
+      } else if (error.statusCode === 404) {
+        alert('Tin nhắn không tồn tại');
+      } else if (error.statusCode === 409) {
+        alert('Tin nhắn không trong cuộc hội thoại này');
+      } else {
+        alert(error.message || 'Không thể sửa tin nhắn');
+      }
     }
   };
 
@@ -276,10 +342,16 @@ export default function ChatWindow({ conversation }) {
     try {
       await deleteMessageAPI(conversation._id, messageId, scope);
       setDeletingMessage(null);
-      // Socket event will update the UI
+      // Socket event 'message_deleted' sẽ update UI
     } catch (error) {
       console.error('Delete message failed:', error);
-      alert(error.message || 'Không thể xóa tin nhắn');
+      if (error.statusCode === 403) {
+        alert('Bạn không có quyền xóa tin nhắn này');
+      } else if (error.statusCode === 409) {
+        alert('Tin nhắn không trong cuộc hội thoại này');
+      } else {
+        alert(error.message || 'Không thể xóa tin nhắn');
+      }
     }
   };
 
@@ -292,9 +364,16 @@ export default function ChatWindow({ conversation }) {
       await forwardMessageAPI(conversation._id, messageId, targetConversationIds);
       setForwardingMessage(null);
       alert('Đã chuyển tiếp tin nhắn thành công!');
+      // Socket events 'message_forwarded' sẽ update các conversations nhận
     } catch (error) {
       console.error('Forward message failed:', error);
-      alert(error.message || 'Không thể chuyển tiếp tin nhắn');
+      if (error.statusCode === 403) {
+        alert('Không có cuộc hội thoại nào hoạt động');
+      } else if (error.statusCode === 404) {
+        alert('Tin nhắn không tồn tại');
+      } else {
+        alert(error.message || 'Không thể chuyển tiếp tin nhắn');
+      }
     }
   };
 
