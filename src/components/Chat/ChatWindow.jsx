@@ -1,5 +1,5 @@
 // Đường dẫn: src/components/Chat/ChatWindow.jsx
-// CẬP NHẬT LẦN 2: Sync với backend - unreact API, message_seen event
+// FIX: Auto mark seen, handle reaction toggle properly
 
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Send, MoreVertical } from 'lucide-react';
@@ -7,7 +7,7 @@ import {
   getMessages, 
   markMessagesSeen,
   addReaction,
-  removeReaction, // NEW: Separate unreact API
+  removeReaction,
   sendMessageWithReply,
   editMessage as editMessageAPI,
   deleteMessage as deleteMessageAPI,
@@ -61,7 +61,7 @@ export default function ChatWindow({ conversation }) {
       socketService.on('message_edited', handleMessageEdited);
       socketService.on('message_deleted', handleMessageDeleted);
       socketService.on('message_forwarded', handleMessageForwarded);
-      socketService.on('message_seen', handleMessageSeen); // NEW
+      socketService.on('message_seen', handleMessageSeen);
       socketService.on('user_typing', handleUserTyping);
       socketService.on('user_stopped_typing', handleUserStoppedTyping);
       
@@ -100,6 +100,7 @@ export default function ChatWindow({ conversation }) {
       const data = await getMessages(conversation._id);
       setMessages(data);
       
+      // FIX: Auto mark seen khi vào conversation
       await markMessagesSeen(conversation._id);
     } catch (error) {
       if (error.statusCode === 403) {
@@ -133,6 +134,16 @@ export default function ChatWindow({ conversation }) {
       console.log('✅ Adding new message');
       return [...prev, message];
     });
+
+    // FIX: Auto mark as seen khi nhận message mới
+    // Chỉ mark seen nếu message không phải của mình
+    if (message.senderId._id !== currentUserId) {
+      setTimeout(() => {
+        markMessagesSeen(conversation._id).catch(err => {
+          console.error('Mark seen failed:', err);
+        });
+      }, 500); // Delay 500ms để user có thời gian nhìn thấy message
+    }
   };
 
   const handleMessageReacted = (data) => {
@@ -145,22 +156,30 @@ export default function ChatWindow({ conversation }) {
       let updatedReactions = [...(msg.reactions || [])];
       
       if (action === 'add') {
-        // Add reaction
-        updatedReactions.push({ userId, emoji });
+        // FIX: Backend toggle emoji - remove old reaction first
+        // Xóa reaction cũ của user này (nếu có)
+        updatedReactions = updatedReactions.filter(r => {
+          const rUserId = typeof r.userId === 'string' ? r.userId : r.userId?._id;
+          return rUserId !== userId;
+        });
+        
+        // Add new reaction
+        updatedReactions.push({ 
+          userId: userId, // Có thể là string hoặc object
+          emoji 
+        });
       } else if (action === 'remove') {
         // Remove reaction
-        // Backend gửi emoji: null hoặc emoji cụ thể
-        if (emoji) {
-          // Remove specific emoji
-          updatedReactions = updatedReactions.filter(
-            r => !(r.userId === userId && r.emoji === emoji)
-          );
-        } else {
-          // Remove all reactions của user này
-          updatedReactions = updatedReactions.filter(
-            r => r.userId !== userId
-          );
-        }
+        updatedReactions = updatedReactions.filter(r => {
+          const rUserId = typeof r.userId === 'string' ? r.userId : r.userId?._id;
+          if (emoji) {
+            // Remove specific emoji
+            return !(rUserId === userId && r.emoji === emoji);
+          } else {
+            // Remove all reactions của user này
+            return rUserId !== userId;
+          }
+        });
       }
       
       return { ...msg, reactions: updatedReactions };
@@ -207,7 +226,6 @@ export default function ChatWindow({ conversation }) {
     handleNewMessage(message);
   };
 
-  // NEW: Handle message seen event
   const handleMessageSeen = (data) => {
     console.log('👁️ Message seen:', data);
     const { conversationId, userId, seenAt } = data;
@@ -215,15 +233,27 @@ export default function ChatWindow({ conversation }) {
     if (conversationId !== conversation._id) return;
     if (userId === currentUserId) return; // Don't update for own seen
     
-    // Update seenBy for all messages
+    // FIX: Update seenBy cho TẤT CẢ messages chưa seen của current user
     setMessages(prev => prev.map(msg => {
-      // Only update if message is from current user and not yet seen by this userId
-      if (msg.senderId._id === currentUserId && !msg.seenBy?.includes(userId)) {
+      // Chỉ update messages do current user gửi
+      const isMine = typeof msg.senderId === 'string' 
+        ? msg.senderId === currentUserId
+        : msg.senderId?._id === currentUserId;
+
+      if (!isMine) return msg;
+
+      // Check nếu userId chưa có trong seenBy
+      const seenByIds = msg.seenBy?.map(sb => 
+        typeof sb === 'string' ? sb : sb._id
+      ) || [];
+
+      if (!seenByIds.includes(userId)) {
         return {
           ...msg,
           seenBy: [...(msg.seenBy || []), userId]
         };
       }
+
       return msg;
     }));
   };
@@ -253,7 +283,6 @@ export default function ChatWindow({ conversation }) {
     setIsSending(true);
     
     try {
-      // Backend đã tự emit socket, không cần emit từ client nữa
       const replyToId = replyTo?._id || null;
       await sendMessageWithReply(conversation._id, content, replyToId);
       
@@ -288,13 +317,11 @@ export default function ChatWindow({ conversation }) {
 
   const handleRemoveReaction = async (messageId, emoji) => {
     try {
-      // NEW: Use separate unreact API
       await removeReaction(conversation._id, messageId, emoji);
       // Socket event 'message_reacted' với action: 'remove' sẽ update UI
     } catch (error) {
       console.error('Remove reaction failed:', error);
       if (error.statusCode === 404) {
-        // Reaction not found - already removed
         console.log('Reaction already removed');
       } else if (error.statusCode === 409) {
         alert('Tin nhắn không trong cuộc hội thoại này');
@@ -319,7 +346,6 @@ export default function ChatWindow({ conversation }) {
     try {
       await editMessageAPI(conversation._id, messageId, newContent);
       setEditingMessage(null);
-      // Socket event 'message_edited' sẽ update UI
     } catch (error) {
       console.error('Edit message failed:', error);
       if (error.statusCode === 403) {
@@ -342,7 +368,6 @@ export default function ChatWindow({ conversation }) {
     try {
       await deleteMessageAPI(conversation._id, messageId, scope);
       setDeletingMessage(null);
-      // Socket event 'message_deleted' sẽ update UI
     } catch (error) {
       console.error('Delete message failed:', error);
       if (error.statusCode === 403) {
@@ -364,7 +389,6 @@ export default function ChatWindow({ conversation }) {
       await forwardMessageAPI(conversation._id, messageId, targetConversationIds);
       setForwardingMessage(null);
       alert('Đã chuyển tiếp tin nhắn thành công!');
-      // Socket events 'message_forwarded' sẽ update các conversations nhận
     } catch (error) {
       console.error('Forward message failed:', error);
       if (error.statusCode === 403) {
@@ -379,7 +403,6 @@ export default function ChatWindow({ conversation }) {
 
   const handleCopy = (message) => {
     navigator.clipboard.writeText(message.content);
-    // Optional: Show toast notification
   };
 
   const handleContextMenu = (e, message) => {

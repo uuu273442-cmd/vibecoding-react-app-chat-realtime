@@ -1,4 +1,5 @@
 // Đường dẫn: src/components/Chat/MessageReactions.jsx
+// FIX: userId là object, not string + Single emoji toggle
 
 import React, { useState, useRef } from 'react';
 import { useOnClickOutside } from '../../hooks/useOnClickOutside';
@@ -18,30 +19,50 @@ const MessageReactions = ({ message, onAddReaction, onRemoveReaction }) => {
 
   // Group reactions by emoji
   const groupedReactions = message.reactions?.reduce((acc, reaction) => {
+    // FIX: userId có thể là string hoặc object
+    const userId = typeof reaction.userId === 'string' 
+      ? reaction.userId 
+      : reaction.userId?._id;
+      
     if (!acc[reaction.emoji]) {
       acc[reaction.emoji] = {
         emoji: reaction.emoji,
         count: 0,
         users: [],
+        userNames: [], // NEW: Store user names for tooltip
         hasCurrentUser: false
       };
     }
     acc[reaction.emoji].count++;
-    acc[reaction.emoji].users.push(reaction.userId);
-    if (reaction.userId === currentUserId) {
+    acc[reaction.emoji].users.push(userId);
+    
+    // Store user name for tooltip
+    const userName = typeof reaction.userId === 'string'
+      ? `User ${userId.slice(-4)}`
+      : reaction.userId?.name || 'Unknown';
+    acc[reaction.emoji].userNames.push(userName);
+    
+    if (userId === currentUserId) {
       acc[reaction.emoji].hasCurrentUser = true;
     }
     return acc;
   }, {}) || {};
 
+  // Find current user's reaction emoji (if any)
+  const currentUserReaction = message.reactions?.find(r => {
+    const userId = typeof r.userId === 'string' ? r.userId : r.userId?._id;
+    return userId === currentUserId;
+  });
+
   const handleReactionClick = (emoji) => {
     const reactionGroup = groupedReactions[emoji];
     
     if (reactionGroup?.hasCurrentUser) {
-      // User already reacted with this emoji -> remove
+      // User đã react với emoji này -> remove
       onRemoveReaction(message._id, emoji);
     } else {
-      // User hasn't reacted -> add
+      // User chưa react hoặc react emoji khác
+      // Backend sẽ tự động replace emoji cũ nếu có
       onAddReaction(message._id, emoji);
     }
   };
@@ -70,6 +91,7 @@ const MessageReactions = ({ message, onAddReaction, onRemoveReaction }) => {
                 key={emoji}
                 onClick={() => handlePickerEmojiClick(emoji)}
                 style={styles.pickerEmoji}
+                title={emoji}
               >
                 {emoji}
               </button>
@@ -101,8 +123,8 @@ const MessageReactions = ({ message, onAddReaction, onRemoveReaction }) => {
           {/* Tooltip showing users who reacted */}
           {hoveredReaction?.emoji === reaction.emoji && reaction.count > 0 && (
             <div style={styles.tooltip}>
-              {reaction.users.slice(0, 3).map((userId, idx) => (
-                <span key={idx}>User {userId.slice(-4)}</span>
+              {reaction.userNames.slice(0, 3).map((name, idx) => (
+                <span key={idx}>{name}</span>
               ))}
               {reaction.count > 3 && (
                 <span>and {reaction.count - 3} more...</span>
@@ -124,15 +146,24 @@ const MessageReactions = ({ message, onAddReaction, onRemoveReaction }) => {
       {/* Reaction Picker */}
       {showPicker && (
         <div ref={pickerRef} style={styles.picker}>
-          {REACTION_EMOJIS.map(emoji => (
-            <button
-              key={emoji}
-              onClick={() => handlePickerEmojiClick(emoji)}
-              style={styles.pickerEmoji}
-            >
-              {emoji}
-            </button>
-          ))}
+          {REACTION_EMOJIS.map(emoji => {
+            // Highlight emoji nếu user đã react
+            const isCurrentUserReaction = currentUserReaction?.emoji === emoji;
+            
+            return (
+              <button
+                key={emoji}
+                onClick={() => handlePickerEmojiClick(emoji)}
+                style={{
+                  ...styles.pickerEmoji,
+                  ...(isCurrentUserReaction ? styles.pickerEmojiActive : {})
+                }}
+                title={emoji}
+              >
+                {emoji}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
@@ -221,6 +252,11 @@ const styles = {
     padding: '4px 8px',
     borderRadius: '6px',
     transition: 'all 0.2s',
+  },
+
+  pickerEmojiActive: {
+    backgroundColor: '#dbeafe',
+    transform: 'scale(1.1)',
   },
 
   tooltip: {
