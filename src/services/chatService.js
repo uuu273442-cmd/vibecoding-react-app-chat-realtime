@@ -450,3 +450,286 @@ export const forwardMessage = async (conversationId, messageId, targetConversati
     throw error;
   }
 };
+
+/**
+ * Upload files (documents)
+ * @param {string} conversationId 
+ * @param {Array<File>} files - Max 10 files, each < 10MB
+ * @param {string|null} replyTo - Optional message ID to reply to
+ * @param {Function} onProgress - Progress callback (0-100)
+ * @returns {Promise<Object>} { message, attachments }
+ */
+export const uploadFiles = async (conversationId, files, replyTo = null, onProgress) => {
+  try {
+    const token = getAccessToken();
+    
+    if (!token) {
+      throw { message: 'No access token found', statusCode: 401 };
+    }
+
+    // Validate
+    if (!files || files.length === 0) {
+      throw { message: 'No files selected', statusCode: 400 };
+    }
+
+    if (files.length > 10) {
+      throw { message: 'Maximum 10 files allowed', statusCode: 400 };
+    }
+
+    // Create FormData
+    const formData = new FormData();
+    files.forEach(file => {
+      formData.append('files', file);
+    });
+
+    if (replyTo) {
+      formData.append('replyTo', replyTo);
+    }
+
+    // Upload with progress tracking
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+
+      // Progress tracking
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable && onProgress) {
+          const progress = Math.round((e.loaded / e.total) * 100);
+          onProgress(progress);
+        }
+      });
+
+      // Success
+      xhr.addEventListener('load', () => {
+        if (xhr.status === 200 || xhr.status === 201) {
+          const data = JSON.parse(xhr.responseText);
+          resolve(data);
+        } else {
+          const error = JSON.parse(xhr.responseText);
+          reject(error);
+        }
+      });
+
+      // Error
+      xhr.addEventListener('error', () => {
+        reject({ message: 'Upload failed', statusCode: 500 });
+      });
+
+      // Abort
+      xhr.addEventListener('abort', () => {
+        reject({ message: 'Upload cancelled', statusCode: 0 });
+      });
+
+      // Open and send
+      xhr.open('POST', `${API_CONFIG.BASE_URL}/messages/${conversationId}/file`);
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      xhr.send(formData);
+    });
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Upload media (images/videos)
+ * @param {string} conversationId 
+ * @param {Array<File>} files - Max 10 files, each < 10MB
+ * @param {string|null} replyTo - Optional message ID to reply to
+ * @param {Function} onProgress - Progress callback (0-100)
+ * @returns {Promise<Object>} { message, attachments }
+ */
+export const uploadMedia = async (conversationId, files, replyTo = null, onProgress) => {
+  try {
+    const token = getAccessToken();
+    
+    if (!token) {
+      throw { message: 'No access token found', statusCode: 401 };
+    }
+
+    if (!files || files.length === 0) {
+      throw { message: 'No files selected', statusCode: 400 };
+    }
+
+    if (files.length > 10) {
+      throw { message: 'Maximum 10 files allowed', statusCode: 400 };
+    }
+
+    const formData = new FormData();
+    files.forEach(file => {
+      formData.append('files', file);
+    });
+
+    if (replyTo) {
+      formData.append('replyTo', replyTo);
+    }
+
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable && onProgress) {
+          const progress = Math.round((e.loaded / e.total) * 100);
+          onProgress(progress);
+        }
+      });
+
+      xhr.addEventListener('load', () => {
+        if (xhr.status === 200 || xhr.status === 201) {
+          const data = JSON.parse(xhr.responseText);
+          resolve(data);
+        } else {
+          const error = JSON.parse(xhr.responseText);
+          reject(error);
+        }
+      });
+
+      xhr.addEventListener('error', () => {
+        reject({ message: 'Upload failed', statusCode: 500 });
+      });
+
+      xhr.addEventListener('abort', () => {
+        reject({ message: 'Upload cancelled', statusCode: 0 });
+      });
+
+      xhr.open('POST', `${API_CONFIG.BASE_URL}/messages/${conversationId}/media`);
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      xhr.send(formData);
+    });
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Upload voice message
+ * @param {string} conversationId 
+ * @param {File} file - Single audio file < 10MB
+ * @param {string|null} replyTo - Optional message ID to reply to
+ * @param {Function} onProgress - Progress callback (0-100)
+ * @returns {Promise<Object>} { message, attachments }
+ */
+export const uploadVoice = async (conversationId, file, replyTo = null, onProgress) => {
+  try {
+    const token = getAccessToken();
+    
+    if (!token) {
+      throw { message: 'No access token found', statusCode: 401 };
+    }
+
+    if (!file) {
+      throw { message: 'No file selected', statusCode: 400 };
+    }
+
+    const formData = new FormData();
+    formData.append('files', file); // Backend expect 'files' field
+
+    if (replyTo) {
+      formData.append('replyTo', replyTo);
+    }
+
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable && onProgress) {
+          const progress = Math.round((e.loaded / e.total) * 100);
+          onProgress(progress);
+        }
+      });
+
+      xhr.addEventListener('load', () => {
+        if (xhr.status === 200 || xhr.status === 201) {
+          const data = JSON.parse(xhr.responseText);
+          resolve(data);
+        } else {
+          const error = JSON.parse(xhr.responseText);
+          reject(error);
+        }
+      });
+
+      xhr.addEventListener('error', () => {
+        reject({ message: 'Upload failed', statusCode: 500 });
+      });
+
+      xhr.addEventListener('abort', () => {
+        reject({ message: 'Upload cancelled', statusCode: 0 });
+      });
+
+      xhr.open('POST', `${API_CONFIG.BASE_URL}/messages/${conversationId}/voice`);
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      xhr.send(formData);
+    });
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Get file icon based on file extension
+ * @param {string} filename 
+ * @returns {string} Icon name
+ */
+export const getFileIcon = (filename) => {
+  const ext = filename.split('.').pop().toLowerCase();
+  
+  const iconMap = {
+    // Documents
+    pdf: 'file-text',
+    doc: 'file-text',
+    docx: 'file-text',
+    txt: 'file-text',
+    
+    // Spreadsheets
+    xls: 'file-spreadsheet',
+    xlsx: 'file-spreadsheet',
+    csv: 'file-spreadsheet',
+    
+    // Presentations
+    ppt: 'file-presentation',
+    pptx: 'file-presentation',
+    
+    // Archives
+    zip: 'file-archive',
+    rar: 'file-archive',
+    '7z': 'file-archive',
+    
+    // Code
+    js: 'file-code',
+    jsx: 'file-code',
+    ts: 'file-code',
+    tsx: 'file-code',
+    html: 'file-code',
+    css: 'file-code',
+    json: 'file-code',
+    
+    // Default
+    default: 'file'
+  };
+  
+  return iconMap[ext] || iconMap.default;
+};
+
+/**
+ * Format file size
+ * @param {number} bytes 
+ * @returns {string} Formatted size (e.g., "1.5 MB")
+ */
+export const formatFileSize = (bytes) => {
+  if (bytes === 0) return '0 B';
+  
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+};
+
+/**
+ * Format duration (seconds to MM:SS)
+ * @param {number} seconds 
+ * @returns {string} Formatted duration
+ */
+export const formatDuration = (seconds) => {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
