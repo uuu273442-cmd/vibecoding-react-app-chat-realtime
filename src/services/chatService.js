@@ -620,7 +620,7 @@ export const uploadVoice = async (conversationId, file, replyTo = null, onProgre
     }
 
     const formData = new FormData();
-    formData.append('files', file); // Backend expect 'files' field
+    formData.append('file', file); // Backend expect 'files' field
 
     if (replyTo) {
       formData.append('replyTo', replyTo);
