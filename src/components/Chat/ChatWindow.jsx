@@ -1,5 +1,5 @@
 // Đường dẫn: src/components/Chat/ChatWindow.jsx
-// FIX: Auto mark seen, handle reaction toggle properly
+// FULL COMPLETE VERSION - File/Media/Voice Upload Integration
 
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Send, MoreVertical } from 'lucide-react';
@@ -11,7 +11,10 @@ import {
   sendMessageWithReply,
   editMessage as editMessageAPI,
   deleteMessage as deleteMessageAPI,
-  forwardMessage as forwardMessageAPI
+  forwardMessage as forwardMessageAPI,
+  uploadFiles,
+  uploadMedia,
+  uploadVoice
 } from '../../services/chatService';
 import { 
   getConversationName, 
@@ -20,15 +23,28 @@ import {
   getCurrentUserId 
 } from '../../utils/chatHelpers';
 import { chatWindowStyles as styles } from '../../styles/chatStyles';
+
+// Message Components
 import MessageBubble from './MessageBubble';
 import ReplyPreview from './ReplyPreview';
 import MessageContextMenu from './MessageContextMenu';
+
+// Modal Components
 import EditMessageModal from './EditMessageModal';
 import DeleteMessageModal from './DeleteMessageModal';
 import ForwardMessageModal from './ForwardMessageModal';
+
+// Upload Components
+import FileUpload from './FileUpload';
+import MediaUpload from './MediaUpload';
+import VoiceRecorder from './VoiceRecorder';
+import UploadButton from './UploadButton';
+import UploadProgress from './UploadProgress';
+
 import socketService from '../../services/socketService';
 
 export default function ChatWindow({ conversation }) {
+  // ============ STATES ============
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -36,26 +52,33 @@ export default function ChatWindow({ conversation }) {
   const [error, setError] = useState('');
   const [typingUsers, setTypingUsers] = useState(new Set());
   
-  // New states for message features
+  // Message Features
   const [replyTo, setReplyTo] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
   const [editingMessage, setEditingMessage] = useState(null);
   const [deletingMessage, setDeletingMessage] = useState(null);
   const [forwardingMessage, setForwardingMessage] = useState(null);
   
+  // Upload States
+  const [isFileUploadOpen, setIsFileUploadOpen] = useState(false);
+  const [isMediaUploadOpen, setIsMediaUploadOpen] = useState(false);
+  const [isVoiceRecording, setIsVoiceRecording] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadingFileName, setUploadingFileName] = useState('');
+  
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const inputRef = useRef(null);
   const currentUserId = getCurrentUserId();
 
+  // ============ EFFECTS ============
   useEffect(() => {
     if (conversation) {
       fetchMessages();
-      
-      // Join conversation room
       socketService.joinConversation(conversation._id);
       
-      // Setup socket listeners
+      // Socket listeners
       socketService.on('new_message', handleNewMessage);
       socketService.on('message_reacted', handleMessageReacted);
       socketService.on('message_edited', handleMessageEdited);
@@ -64,8 +87,11 @@ export default function ChatWindow({ conversation }) {
       socketService.on('message_seen', handleMessageSeen);
       socketService.on('user_typing', handleUserTyping);
       socketService.on('user_stopped_typing', handleUserStoppedTyping);
+      socketService.on('new_message_file', handleNewMessageFile);
+      socketService.on('new_message_media', handleNewMessageMedia);
+      socketService.on('new_message_voice', handleNewMessageVoice);
+      socketService.on('new_message_linkPreview', handleNewMessageLinkPreview);
       
-      // Cleanup
       return () => {
         socketService.leaveConversation(conversation._id);
         socketService.off('new_message', handleNewMessage);
@@ -76,6 +102,10 @@ export default function ChatWindow({ conversation }) {
         socketService.off('message_seen', handleMessageSeen);
         socketService.off('user_typing', handleUserTyping);
         socketService.off('user_stopped_typing', handleUserStoppedTyping);
+        socketService.off('new_message_file', handleNewMessageFile);
+        socketService.off('new_message_media', handleNewMessageMedia);
+        socketService.off('new_message_voice', handleNewMessageVoice);
+        socketService.off('new_message_linkPreview', handleNewMessageLinkPreview);
         setTypingUsers(new Set());
       };
     }
@@ -85,7 +115,6 @@ export default function ChatWindow({ conversation }) {
     scrollToBottom();
   }, [messages]);
 
-  // Close context menu on scroll
   useEffect(() => {
     const handleScroll = () => setContextMenu(null);
     const container = document.getElementById('messages-container');
@@ -93,14 +122,13 @@ export default function ChatWindow({ conversation }) {
     return () => container?.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // ============ FETCH MESSAGES ============
   const fetchMessages = async () => {
     try {
       setIsLoading(true);
       setError('');
       const data = await getMessages(conversation._id);
       setMessages(data);
-      
-      // FIX: Auto mark seen khi vào conversation
       await markMessagesSeen(conversation._id);
     } catch (error) {
       if (error.statusCode === 403) {
@@ -115,39 +143,22 @@ export default function ChatWindow({ conversation }) {
     }
   };
 
-  // ========== SOCKET EVENT HANDLERS ==========
-
+  // ============ SOCKET HANDLERS ============
   const handleNewMessage = (message) => {
-    console.log('📩 New message received:', message);
-    
-    if (message.conversationId !== conversation._id) {
-      console.log('⚠️ Message not for current conversation');
-      return;
-    }
+    if (message.conversationId !== conversation._id) return;
     
     setMessages(prev => {
       const exists = prev.some(m => m._id === message._id);
-      if (exists) {
-        console.log('⚠️ Message already exists');
-        return prev;
-      }
-      console.log('✅ Adding new message');
+      if (exists) return prev;
       return [...prev, message];
     });
 
-    // FIX: Auto mark as seen khi nhận message mới
-    // Chỉ mark seen nếu message không phải của mình
     if (message.senderId._id !== currentUserId) {
-      setTimeout(() => {
-        markMessagesSeen(conversation._id).catch(err => {
-          console.error('Mark seen failed:', err);
-        });
-      }, 500); // Delay 500ms để user có thời gian nhìn thấy message
+      setTimeout(() => markMessagesSeen(conversation._id).catch(console.error), 500);
     }
   };
 
   const handleMessageReacted = (data) => {
-    console.log('👍 Message reacted:', data);
     const { messageId, userId, emoji, action } = data;
     
     setMessages(prev => prev.map(msg => {
@@ -156,27 +167,17 @@ export default function ChatWindow({ conversation }) {
       let updatedReactions = [...(msg.reactions || [])];
       
       if (action === 'add') {
-        // FIX: Backend toggle emoji - remove old reaction first
-        // Xóa reaction cũ của user này (nếu có)
         updatedReactions = updatedReactions.filter(r => {
           const rUserId = typeof r.userId === 'string' ? r.userId : r.userId?._id;
           return rUserId !== userId;
         });
-        
-        // Add new reaction
-        updatedReactions.push({ 
-          userId: userId, // Có thể là string hoặc object
-          emoji 
-        });
+        updatedReactions.push({ userId, emoji });
       } else if (action === 'remove') {
-        // Remove reaction
         updatedReactions = updatedReactions.filter(r => {
           const rUserId = typeof r.userId === 'string' ? r.userId : r.userId?._id;
           if (emoji) {
-            // Remove specific emoji
             return !(rUserId === userId && r.emoji === emoji);
           } else {
-            // Remove all reactions của user này
             return rUserId !== userId;
           }
         });
@@ -187,14 +188,12 @@ export default function ChatWindow({ conversation }) {
   };
 
   const handleMessageEdited = (updatedMessage) => {
-    console.log('✏️ Message edited:', updatedMessage);
     setMessages(prev => prev.map(msg => 
       msg._id === updatedMessage._id ? updatedMessage : msg
     ));
   };
 
   const handleMessageDeleted = (data) => {
-    console.log('🗑️ Message deleted:', data);
     const { messageId, scope, deletedBy } = data;
     
     setMessages(prev => prev.map(msg => {
@@ -207,7 +206,6 @@ export default function ChatWindow({ conversation }) {
           isDeleted: true
         };
       } else {
-        // scope === 'self'
         if (deletedBy === currentUserId) {
           return {
             ...msg,
@@ -221,28 +219,23 @@ export default function ChatWindow({ conversation }) {
   };
 
   const handleMessageForwarded = (message) => {
-    console.log('➡️ Message forwarded:', message);
     if (message.conversationId !== conversation._id) return;
     handleNewMessage(message);
   };
 
   const handleMessageSeen = (data) => {
-    console.log('👁️ Message seen:', data);
-    const { conversationId, userId, seenAt } = data;
+    const { conversationId, userId } = data;
     
     if (conversationId !== conversation._id) return;
-    if (userId === currentUserId) return; // Don't update for own seen
+    if (userId === currentUserId) return;
     
-    // FIX: Update seenBy cho TẤT CẢ messages chưa seen của current user
     setMessages(prev => prev.map(msg => {
-      // Chỉ update messages do current user gửi
       const isMine = typeof msg.senderId === 'string' 
         ? msg.senderId === currentUserId
         : msg.senderId?._id === currentUserId;
 
       if (!isMine) return msg;
 
-      // Check nếu userId chưa có trong seenBy
       const seenByIds = msg.seenBy?.map(sb => 
         typeof sb === 'string' ? sb : sb._id
       ) || [];
@@ -274,8 +267,76 @@ export default function ChatWindow({ conversation }) {
     }
   };
 
-  // ========== MESSAGE ACTIONS ==========
+  // ============ UPLOAD SOCKET HANDLERS ============
+  const handleNewMessageFile = (data) => {
+    const { message, attachments } = data;
+    
+    if (message.conversationId !== conversation._id) return;
+    
+    setMessages(prev => {
+      const exists = prev.some(m => m._id === message._id);
+      if (exists) return prev;
+      return [...prev, { ...message, attachments }];
+    });
+    
+    if (message.senderId._id !== currentUserId) {
+      setTimeout(() => markMessagesSeen(conversation._id).catch(console.error), 500);
+    }
+  };
 
+  const handleNewMessageMedia = (data) => {
+    const { message, attachments } = data;
+    
+    if (message.conversationId !== conversation._id) return;
+    
+    setMessages(prev => {
+      const exists = prev.some(m => m._id === message._id);
+      if (exists) return prev;
+      return [...prev, { ...message, attachments }];
+    });
+    
+    if (message.senderId._id !== currentUserId) {
+      setTimeout(() => markMessagesSeen(conversation._id).catch(console.error), 500);
+    }
+  };
+
+  const handleNewMessageVoice = (data) => {
+    const { message, attachments } = data;
+    
+    if (message.conversationId !== conversation._id) return;
+    
+    setMessages(prev => {
+      const exists = prev.some(m => m._id === message._id);
+      if (exists) return prev;
+      return [...prev, { ...message, attachments: [attachments] }];
+    });
+    
+    if (message.senderId._id !== currentUserId) {
+      setTimeout(() => markMessagesSeen(conversation._id).catch(console.error), 500);
+    }
+  };
+
+  const handleNewMessageLinkPreview = (links) => {
+    if (!links || links.length === 0) return;
+    
+    setMessages(prev => {
+      if (prev.length === 0) return prev;
+      
+      const lastMessage = prev[prev.length - 1];
+      
+      if (links[0].messageId === lastMessage._id) {
+        return prev.map((msg, idx) => 
+          idx === prev.length - 1 
+            ? { ...msg, linkPreviews: links }
+            : msg
+        );
+      }
+      
+      return prev;
+    });
+  };
+
+  // ============ MESSAGE ACTIONS ============
   const handleSendMessage = async () => {
     const content = inputMessage.trim();
     if (!content) return;
@@ -286,14 +347,9 @@ export default function ChatWindow({ conversation }) {
       const replyToId = replyTo?._id || null;
       await sendMessageWithReply(conversation._id, content, replyToId);
       
-      // Clear input & reply
       setInputMessage('');
       setReplyTo(null);
-      
-      // Stop typing indicator
       socketService.stopTyping(conversation._id);
-      
-      // Socket event 'new_message' sẽ tự động update UI
       
     } catch (error) {
       console.error('Send message error:', error);
@@ -306,36 +362,22 @@ export default function ChatWindow({ conversation }) {
   const handleAddReaction = async (messageId, emoji) => {
     try {
       await addReaction(conversation._id, messageId, emoji);
-      // Socket event 'message_reacted' sẽ update UI
     } catch (error) {
       console.error('Add reaction failed:', error);
-      if (error.statusCode === 409) {
-        alert('Tin nhắn không trong cuộc hội thoại này');
-      }
     }
   };
 
   const handleRemoveReaction = async (messageId, emoji) => {
     try {
       await removeReaction(conversation._id, messageId, emoji);
-      // Socket event 'message_reacted' với action: 'remove' sẽ update UI
     } catch (error) {
       console.error('Remove reaction failed:', error);
-      if (error.statusCode === 404) {
-        console.log('Reaction already removed');
-      } else if (error.statusCode === 409) {
-        alert('Tin nhắn không trong cuộc hội thoại này');
-      }
     }
   };
 
   const handleReply = (message) => {
     setReplyTo(message);
     inputRef.current?.focus();
-  };
-
-  const handleCancelReply = () => {
-    setReplyTo(null);
   };
 
   const handleEdit = (message) => {
@@ -348,15 +390,7 @@ export default function ChatWindow({ conversation }) {
       setEditingMessage(null);
     } catch (error) {
       console.error('Edit message failed:', error);
-      if (error.statusCode === 403) {
-        alert('Bạn không có quyền sửa tin nhắn này');
-      } else if (error.statusCode === 404) {
-        alert('Tin nhắn không tồn tại');
-      } else if (error.statusCode === 409) {
-        alert('Tin nhắn không trong cuộc hội thoại này');
-      } else {
-        alert(error.message || 'Không thể sửa tin nhắn');
-      }
+      alert(error.message || 'Không thể sửa tin nhắn');
     }
   };
 
@@ -370,13 +404,7 @@ export default function ChatWindow({ conversation }) {
       setDeletingMessage(null);
     } catch (error) {
       console.error('Delete message failed:', error);
-      if (error.statusCode === 403) {
-        alert('Bạn không có quyền xóa tin nhắn này');
-      } else if (error.statusCode === 409) {
-        alert('Tin nhắn không trong cuộc hội thoại này');
-      } else {
-        alert(error.message || 'Không thể xóa tin nhắn');
-      }
+      alert(error.message || 'Không thể xóa tin nhắn');
     }
   };
 
@@ -391,13 +419,7 @@ export default function ChatWindow({ conversation }) {
       alert('Đã chuyển tiếp tin nhắn thành công!');
     } catch (error) {
       console.error('Forward message failed:', error);
-      if (error.statusCode === 403) {
-        alert('Không có cuộc hội thoại nào hoạt động');
-      } else if (error.statusCode === 404) {
-        alert('Tin nhắn không tồn tại');
-      } else {
-        alert(error.message || 'Không thể chuyển tiếp tin nhắn');
-      }
+      alert(error.message || 'Không thể chuyển tiếp tin nhắn');
     }
   };
 
@@ -414,10 +436,99 @@ export default function ChatWindow({ conversation }) {
     });
   };
 
+  // ============ UPLOAD HANDLERS ============
+  const handleFileUpload = async (files) => {
+    setIsUploading(true);
+    setUploadProgress(0);
+    setUploadingFileName(files.length > 1 ? `${files.length} files` : files[0].name);
+    
+    try {
+      const replyToId = replyTo?._id || null;
+      
+      await uploadFiles(
+        conversation._id,
+        files,
+        replyToId,
+        (progress) => setUploadProgress(progress)
+      );
+      
+      setIsFileUploadOpen(false);
+      setReplyTo(null);
+      
+    } catch (error) {
+      console.error('File upload failed:', error);
+      alert(error.message || 'Upload failed');
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
+      setUploadingFileName('');
+    }
+  };
+
+  const handleMediaUpload = async (files) => {
+    setIsUploading(true);
+    setUploadProgress(0);
+    setUploadingFileName(files.length > 1 ? `${files.length} files` : files[0].name);
+    
+    try {
+      const replyToId = replyTo?._id || null;
+      
+      await uploadMedia(
+        conversation._id,
+        files,
+        replyToId,
+        (progress) => setUploadProgress(progress)
+      );
+      
+      setIsMediaUploadOpen(false);
+      setReplyTo(null);
+      
+    } catch (error) {
+      console.error('Media upload failed:', error);
+      alert(error.message || 'Upload failed');
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
+      setUploadingFileName('');
+    }
+  };
+
+  const handleVoiceUpload = async (audioBlob) => {
+    setIsUploading(true);
+    setUploadProgress(0);
+    setUploadingFileName('Voice message');
+    
+    try {
+      const file = new File([audioBlob], 'voice-message.mp3', {
+        type: 'audio/mpeg'
+      });
+      
+      const replyToId = replyTo?._id || null;
+      
+      await uploadVoice(
+        conversation._id,
+        file,
+        replyToId,
+        (progress) => setUploadProgress(progress)
+      );
+      
+      setIsVoiceRecording(false);
+      setReplyTo(null);
+      
+    } catch (error) {
+      console.error('Voice upload failed:', error);
+      alert(error.message || 'Upload failed');
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
+      setUploadingFileName('');
+    }
+  };
+
+  // ============ INPUT HANDLERS ============
   const handleInputChange = (e) => {
     setInputMessage(e.target.value);
     
-    // Typing indicator
     if (e.target.value.trim()) {
       socketService.startTyping(conversation._id);
       
@@ -444,6 +555,7 @@ export default function ChatWindow({ conversation }) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // ============ RENDER ============
   if (!conversation) {
     return null;
   }
@@ -451,8 +563,6 @@ export default function ChatWindow({ conversation }) {
   const name = getConversationName(conversation);
   const status = getConversationStatus(conversation);
   const avatar = getConversationAvatar(conversation);
-
-  // Filter out messages deleted for current user
   const visibleMessages = messages.filter(msg => 
     !msg.deletedFor?.includes(currentUserId)
   );
@@ -522,7 +632,6 @@ export default function ChatWindow({ conversation }) {
               />
             ))}
             
-            {/* Typing Indicator */}
             {typingUsers.size > 0 && (
               <div style={styles.typingIndicatorContainer}>
                 <div style={styles.typingBubble}>
@@ -543,12 +652,18 @@ export default function ChatWindow({ conversation }) {
       {replyTo && (
         <ReplyPreview 
           replyToMessage={replyTo}
-          onCancel={handleCancelReply}
+          onCancel={() => setReplyTo(null)}
         />
       )}
 
       {/* Input Area */}
       <div style={styles.inputContainer}>
+        <UploadButton
+          onFileClick={() => setIsFileUploadOpen(true)}
+          onMediaClick={() => setIsMediaUploadOpen(true)}
+          onVoiceClick={() => setIsVoiceRecording(true)}
+        />
+        
         <input
           ref={inputRef}
           type="text"
@@ -559,6 +674,7 @@ export default function ChatWindow({ conversation }) {
           style={styles.input}
           disabled={isSending}
         />
+        
         <button
           onClick={handleSendMessage}
           disabled={!inputMessage.trim() || isSending}
@@ -614,6 +730,36 @@ export default function ChatWindow({ conversation }) {
           message={forwardingMessage}
           onClose={() => setForwardingMessage(null)}
           onSubmit={handleForwardSubmit}
+        />
+      )}
+
+      {/* Upload Modals */}
+      {isFileUploadOpen && (
+        <FileUpload
+          onFilesSelected={handleFileUpload}
+          onClose={() => setIsFileUploadOpen(false)}
+        />
+      )}
+
+      {isMediaUploadOpen && (
+        <MediaUpload
+          onFilesSelected={handleMediaUpload}
+          onClose={() => setIsMediaUploadOpen(false)}
+        />
+      )}
+
+      {isVoiceRecording && (
+        <VoiceRecorder
+          onRecordingComplete={handleVoiceUpload}
+          onCancel={() => setIsVoiceRecording(false)}
+        />
+      )}
+
+      {/* Upload Progress */}
+      {isUploading && (
+        <UploadProgress
+          progress={uploadProgress}
+          fileName={uploadingFileName}
         />
       )}
     </div>
