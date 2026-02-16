@@ -2,9 +2,9 @@
 // FULL COMPLETE VERSION - File/Media/Voice Upload Integration
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Send, MoreVertical } from 'lucide-react';
+import { User, Send, MoreVertical, Search as SearchIcon } from 'lucide-react';
 import { 
-  getMessages, 
+  getMessagesPaginated, 
   markMessagesSeen,
   addReaction,
   removeReaction,
@@ -14,7 +14,10 @@ import {
   forwardMessage as forwardMessageAPI,
   uploadFiles,
   uploadMedia,
-  uploadVoice
+  uploadVoice,
+  pinMessage,
+  unpinMessage,
+  getPinnedMessages
 } from '../../services/chatService';
 import { 
   getConversationName, 
@@ -40,6 +43,11 @@ import MediaUpload from './MediaUpload';
 import VoiceRecorder from './VoiceRecorder';
 import UploadButton from './UploadButton';
 import UploadProgress from './UploadProgress';
+
+
+// Message Management Components
+import MessageSearch from './MessageSearch';
+import PinnedMessages from './PinnedMessages';
 
 import socketService from '../../services/socketService';
 
@@ -68,6 +76,15 @@ export default function ChatWindow({ conversation }) {
   const [uploadingFileName, setUploadingFileName] = useState('');
   
   const messagesEndRef = useRef(null);
+  
+  // Message Management States
+  const [showSearch, setShowSearch] = useState(false);
+  const [pinnedMessages, setPinnedMessages] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  
+  const messagesContainerRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const inputRef = useRef(null);
   const currentUserId = getCurrentUserId();
@@ -91,6 +108,8 @@ export default function ChatWindow({ conversation }) {
       socketService.on('new_message_media', handleNewMessageMedia);
       socketService.on('new_message_voice', handleNewMessageVoice);
       socketService.on('new_message_linkPreview', handleNewMessageLinkPreview);
+      socketService.on('message_pinned', handleMessagePinned);
+      socketService.on('message_unpinned', handleMessageUnpinned);
       
       return () => {
         socketService.leaveConversation(conversation._id);
@@ -106,6 +125,8 @@ export default function ChatWindow({ conversation }) {
         socketService.off('new_message_media', handleNewMessageMedia);
         socketService.off('new_message_voice', handleNewMessageVoice);
         socketService.off('new_message_linkPreview', handleNewMessageLinkPreview);
+        socketService.off('message_pinned', handleMessagePinned);
+        socketService.off('message_unpinned', handleMessageUnpinned);
         setTypingUsers(new Set());
       };
     }
@@ -122,13 +143,40 @@ export default function ChatWindow({ conversation }) {
     return () => container?.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Update pinned messages when messages change
+  useEffect(() => {
+    setPinnedMessages(getPinnedMessages(messages));
+  }, [messages]);
+
+  // Pagination scroll listener
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = (e) => {
+      if (e.target.scrollTop === 0 && hasMore && !isLoadingMore) {
+        loadMoreMessages();
+      }
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [hasMore, isLoadingMore, currentPage]);
+
+
   // ============ FETCH MESSAGES ============
   const fetchMessages = async () => {
     try {
       setIsLoading(true);
       setError('');
-      const data = await getMessages(conversation._id);
+      
+      const { messages: data, hasMore: more } = 
+        await getMessagesPaginated(conversation._id, 1, 20);
+      
       setMessages(data);
+      setCurrentPage(1);
+      setHasMore(more);
+      
       await markMessagesSeen(conversation._id);
     } catch (error) {
       if (error.statusCode === 403) {
@@ -544,6 +592,91 @@ export default function ChatWindow({ conversation }) {
     }
   };
 
+
+
+  // ============ MESSAGE MANAGEMENT HANDLERS ============
+  
+  const handleMessagePinned = (data) => {
+    const { messageId, isPinned, pinByUser, pinnedAt } = data;
+    setMessages(prev => prev.map(msg => 
+      msg._id === messageId ? { ...msg, isPinned, pinByUser, pinnedAt } : msg
+    ));
+  };
+
+  const handleMessageUnpinned = (data) => {
+    const { messageId } = data;
+    setMessages(prev => prev.map(msg => 
+      msg._id === messageId ? { ...msg, isPinned: false, pinByUser: null, pinnedAt: null } : msg
+    ));
+  };
+
+  const handlePinMessage = async (messageId) => {
+    try {
+      await pinMessage(conversation._id, messageId);
+    } catch (error) {
+      console.error('Pin failed:', error);
+      if (error.statusCode === 403) {
+        alert('Tin nhắn đã được ghim rồi');
+      } else {
+        alert(error.message || 'Không thể ghim tin nhắn');
+      }
+    }
+  };
+
+  const handleUnpinMessage = async (messageId) => {
+    try {
+      await unpinMessage(conversation._id, messageId);
+    } catch (error) {
+      console.error('Unpin failed:', error);
+      if (error.statusCode === 403) {
+        alert('Tin nhắn chưa được ghim');
+      } else {
+        alert(error.message || 'Không thể bỏ ghim tin nhắn');
+      }
+    }
+  };
+
+  const handleJumpToMessage = (message) => {
+    setShowSearch(false);
+    const el = document.getElementById(`message-${message._id}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.style.backgroundColor = '#fef3c7';
+      setTimeout(() => el.style.backgroundColor = '', 2000);
+    } else {
+      alert('Cuộn lên để tải thêm tin nhắn');
+    }
+  };
+
+  const loadMoreMessages = async () => {
+    if (isLoadingMore || !hasMore) return;
+    
+    setIsLoadingMore(true);
+    
+    try {
+      const container = messagesContainerRef.current;
+      const scrollHeightBefore = container?.scrollHeight || 0;
+      
+      const { messages: newMessages, hasMore: more} = 
+        await getMessagesPaginated(conversation._id, currentPage + 1, 20);
+      
+      setMessages(prev => [...newMessages, ...prev]);
+      setCurrentPage(prev => prev + 1);
+      setHasMore(more);
+      
+      requestAnimationFrame(() => {
+        if (container) {
+          const scrollHeightAfter = container.scrollHeight;
+          container.scrollTop = scrollHeightAfter - scrollHeightBefore;
+        }
+      });
+    } catch (error) {
+      console.error('Load more failed:', error);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -594,13 +727,40 @@ export default function ChatWindow({ conversation }) {
           </div>
         </div>
 
-        <button style={styles.moreButton}>
-          <MoreVertical size={20} />
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button 
+            onClick={() => setShowSearch(true)} 
+            style={styles.moreButton}
+            title="Search messages"
+          >
+            <SearchIcon size={20} />
+          </button>
+          
+          <button style={styles.moreButton}>
+            <MoreVertical size={20} />
+          </button>
+        </div>
       </div>
 
+      {/* Pinned Messages Bar */}
+      {pinnedMessages.length > 0 && (
+        <PinnedMessages
+          pinnedMessages={pinnedMessages}
+          onUnpin={handleUnpinMessage}
+          onMessageClick={handleJumpToMessage}
+          currentUserId={currentUserId}
+        />
+      )}
+
       {/* Messages Area */}
-      <div id="messages-container" style={styles.messagesContainer}>
+      <div ref={messagesContainerRef} id="messages-container" style={styles.messagesContainer}>
+        {isLoadingMore && (
+          <div style={styles.loadMoreIndicator}>
+            <div style={styles.spinner}>⟳</div>
+            <span>Loading more messages...</span>
+          </div>
+        )}
+        
         {isLoading ? (
           <div style={styles.loadingContainer}>
             <div style={styles.spinner}>⟳</div>
@@ -618,8 +778,8 @@ export default function ChatWindow({ conversation }) {
         ) : (
           <>
             {visibleMessages.map((message, index) => (
-              <MessageBubble
-                key={message._id}
+              <div key={message._id} id={`message-${message._id}`}>
+                <MessageBubble
                 message={message}
                 isOwn={message.senderId._id === currentUserId}
                 showAvatar={
@@ -630,6 +790,7 @@ export default function ChatWindow({ conversation }) {
                 onAddReaction={handleAddReaction}
                 onRemoveReaction={handleRemoveReaction}
               />
+              </div>
             ))}
             
             {typingUsers.size > 0 && (
@@ -703,6 +864,9 @@ export default function ChatWindow({ conversation }) {
           onDelete={handleDelete}
           onCopy={handleCopy}
           onForward={handleForward}
+          onPin={handlePinMessage}
+          onUnpin={handleUnpinMessage}
+          isPinned={contextMenu.message.isPinned}
         />
       )}
 
@@ -760,6 +924,14 @@ export default function ChatWindow({ conversation }) {
         <UploadProgress
           progress={uploadProgress}
           fileName={uploadingFileName}
+        />
+      )}
+
+      {/* Search Modal */}
+      {showSearch && (
+        <MessageSearch
+          onResultClick={handleJumpToMessage}
+          onClose={() => setShowSearch(false)}
         />
       )}
     </div>
