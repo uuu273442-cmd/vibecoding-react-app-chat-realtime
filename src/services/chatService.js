@@ -733,3 +733,178 @@ export const formatDuration = (seconds) => {
   const secs = Math.floor(seconds % 60);
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
+
+/**
+ * Search messages globally
+ * @param {string} query - Search keyword
+ * @returns {Promise<Array>} Search results with score
+ */
+export const searchMessages = async (query) => {
+  try {
+    const token = getAccessToken();
+    
+    if (!token) {
+      throw { message: 'No access token found', statusCode: 401 };
+    }
+
+    if (!query || query.trim().length === 0) {
+      return [];
+    }
+
+    const response = await fetch(
+      `${API_CONFIG.BASE_URL}/messages/search?q=${encodeURIComponent(query)}`,
+      {
+        method: 'GET',
+        headers: {
+          ...API_CONFIG.HEADERS,
+          'Authorization': `Bearer ${token}`
+        }
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw data;
+    }
+
+    return data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Pin a message
+ * @param {string} conversationId 
+ * @param {string} messageId 
+ * @returns {Promise<Object>} Updated message with isPinned: true
+ */
+export const pinMessage = async (conversationId, messageId) => {
+  try {
+    const token = getAccessToken();
+    
+    if (!token) {
+      throw { message: 'No access token found', statusCode: 401 };
+    }
+
+    const response = await fetch(
+      `${API_CONFIG.BASE_URL}/messages/${conversationId}/pin`,
+      {
+        method: 'POST',
+        headers: {
+          ...API_CONFIG.HEADERS,
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ id: messageId })
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw data;
+    }
+
+    return data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Unpin a message
+ * @param {string} conversationId 
+ * @param {string} messageId 
+ * @returns {Promise<Object>} Updated message with isPinned: false
+ */
+export const unpinMessage = async (conversationId, messageId) => {
+  try {
+    const token = getAccessToken();
+    
+    if (!token) {
+      throw { message: 'No access token found', statusCode: 401 };
+    }
+
+    const response = await fetch(
+      `${API_CONFIG.BASE_URL}/messages/${conversationId}/unpin`,
+      {
+        method: 'PATCH',
+        headers: {
+          ...API_CONFIG.HEADERS,
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ id: messageId })
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw data;
+    }
+
+    return data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Get messages with pagination
+ * @param {string} conversationId 
+ * @param {number} page - Page number (1-based)
+ * @param {number} limit - Messages per page (default 20)
+ * @returns {Promise<Object>} { messages: [], hasMore: boolean }
+ */
+export const getMessagesPaginated = async (conversationId, page = 1, limit = 20) => {
+  try {
+    const token = getAccessToken();
+    
+    if (!token) {
+      throw { message: 'No access token found', statusCode: 401 };
+    }
+
+    const response = await fetch(
+      `${API_CONFIG.BASE_URL}/messages/${conversationId}?page=${page}&limit=${limit}`,
+      {
+        method: 'GET',
+        headers: {
+          ...API_CONFIG.HEADERS,
+          'Authorization': `Bearer ${token}`
+        }
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw data;
+    }
+
+    // Check if has more
+    // If backend returns less than limit, no more pages
+    const hasMore = Array.isArray(data) ? data.length === limit : false;
+
+    return {
+      messages: Array.isArray(data) ? data : [],
+      hasMore,
+      page,
+      limit
+    };
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Get pinned messages in a conversation
+ * @param {Array} messages - All messages in conversation
+ * @returns {Array} Pinned messages (max 3)
+ */
+export const getPinnedMessages = (messages) => {
+  return messages
+    .filter(msg => msg.isPinned === true)
+    .sort((a, b) => new Date(b.pinnedAt) - new Date(a.pinnedAt))
+    .slice(0, 3);
+};
