@@ -5,7 +5,6 @@ import { getAccessToken } from "./authService";
 
 // ============ CONVERSATIONS ============
 
-// Get all conversations
 export const getConversations = async () => {
   try {
     const token = getAccessToken();
@@ -27,7 +26,6 @@ export const getConversations = async () => {
   }
 };
 
-// Get list of users (for creating new conversation)
 export const getListUsers = async () => {
   try {
     const token = getAccessToken();
@@ -49,7 +47,6 @@ export const getListUsers = async () => {
   }
 };
 
-// Create private conversation
 export const createPrivateConversation = async (userId) => {
   try {
     const token = getAccessToken();
@@ -125,7 +122,6 @@ export const getMoreMessages = async (conversationId, beforeMessageId, limit = 1
   }
 };
 
-// Mark messages as seen
 export const markMessagesSeen = async (conversationId) => {
   try {
     const token = getAccessToken();
@@ -147,7 +143,6 @@ export const markMessagesSeen = async (conversationId) => {
   }
 };
 
-// Send a message (basic - không có replyTo)
 export const sendMessage = async (conversationId, content) => {
   try {
     const token = getAccessToken();
@@ -170,9 +165,6 @@ export const sendMessage = async (conversationId, content) => {
   }
 };
 
-/**
- * Send message with optional reply
- */
 export const sendMessageWithReply = async (conversationId, content, replyTo = null) => {
   try {
     const token = getAccessToken();
@@ -200,9 +192,6 @@ export const sendMessageWithReply = async (conversationId, content, replyTo = nu
 
 // ============ REACTIONS ============
 
-/**
- * Add reaction to a message
- */
 export const addReaction = async (conversationId, messageId, emoji) => {
   try {
     const token = getAccessToken();
@@ -225,9 +214,6 @@ export const addReaction = async (conversationId, messageId, emoji) => {
   }
 };
 
-/**
- * Remove reaction from a message
- */
 export const removeReaction = async (conversationId, messageId, emoji) => {
   try {
     const token = getAccessToken();
@@ -250,16 +236,12 @@ export const removeReaction = async (conversationId, messageId, emoji) => {
   }
 };
 
-// Toggle reaction (alias - dùng addReaction vì backend tự toggle)
 export const toggleReaction = async (conversationId, messageId, emoji) => {
   return addReaction(conversationId, messageId, emoji);
 };
 
 // ============ EDIT / DELETE / FORWARD ============
 
-/**
- * Edit message content
- */
 export const editMessage = async (conversationId, messageId, newContent) => {
   try {
     const token = getAccessToken();
@@ -282,10 +264,6 @@ export const editMessage = async (conversationId, messageId, newContent) => {
   }
 };
 
-/**
- * Delete message
- * scope: 'self' | 'everyone'
- */
 export const deleteMessage = async (conversationId, messageId, scope = "self") => {
   try {
     const token = getAccessToken();
@@ -308,9 +286,6 @@ export const deleteMessage = async (conversationId, messageId, scope = "self") =
   }
 };
 
-/**
- * Forward message to multiple conversations
- */
 export const forwardMessage = async (conversationId, messageId, targetConversationIds) => {
   try {
     const token = getAccessToken();
@@ -335,9 +310,6 @@ export const forwardMessage = async (conversationId, messageId, targetConversati
 
 // ============ PIN / UNPIN ============
 
-/**
- * Pin a message (max 3 per conversation)
- */
 export const pinMessage = async (conversationId, messageId) => {
   try {
     const token = getAccessToken();
@@ -360,9 +332,6 @@ export const pinMessage = async (conversationId, messageId) => {
   }
 };
 
-/**
- * Unpin a message
- */
 export const unpinMessage = async (conversationId, messageId) => {
   try {
     const token = getAccessToken();
@@ -385,10 +354,6 @@ export const unpinMessage = async (conversationId, messageId) => {
   }
 };
 
-/**
- * Get pinned messages từ messages array (client-side filter)
- * Max 3, sorted by pinnedAt desc
- */
 export const getPinnedMessages = (messages) => {
   return messages
     .filter((msg) => msg.isPinned === true)
@@ -399,10 +364,11 @@ export const getPinnedMessages = (messages) => {
 // ============ SEARCH ============
 
 /**
- * Search messages globally
+ * Search messages trong 1 conversation cụ thể
+ * API: GET /messages/:conversationId/search?q=keyword
  * Response: [{ ...message, score: 1.0 }, ...]
  */
-export const searchMessages = async (query) => {
+export const searchMessages = async (conversationId, query) => {
   try {
     const token = getAccessToken();
     if (!token) throw { message: "No access token found", statusCode: 401 };
@@ -410,7 +376,7 @@ export const searchMessages = async (query) => {
     if (!query || query.trim().length === 0) return [];
 
     const response = await fetch(
-      `${API_CONFIG.BASE_URL}/messages/search?q=${encodeURIComponent(query.trim())}`,
+      `${API_CONFIG.BASE_URL}/messages/${conversationId}/search?q=${encodeURIComponent(query.trim())}`,
       {
         method: "GET",
         headers: { ...API_CONFIG.HEADERS, Authorization: `Bearer ${token}` },
@@ -464,9 +430,6 @@ const uploadWithXHR = (url, formData, token, onProgress) => {
   });
 };
 
-/**
- * Upload files (documents) - max 10 files, mỗi file < 10MB
- */
 export const uploadFiles = async (conversationId, files, replyTo = null, onProgress) => {
   try {
     const token = getAccessToken();
@@ -489,9 +452,6 @@ export const uploadFiles = async (conversationId, files, replyTo = null, onProgr
   }
 };
 
-/**
- * Upload media (images/videos) - max 10 files, mỗi file < 10MB
- */
 export const uploadMedia = async (conversationId, files, replyTo = null, onProgress) => {
   try {
     const token = getAccessToken();
@@ -514,9 +474,6 @@ export const uploadMedia = async (conversationId, files, replyTo = null, onProgr
   }
 };
 
-/**
- * Upload voice message - single audio file < 10MB
- */
 export const uploadVoice = async (conversationId, file, replyTo = null, onProgress) => {
   try {
     const token = getAccessToken();
@@ -540,9 +497,6 @@ export const uploadVoice = async (conversationId, file, replyTo = null, onProgre
 
 // ============ HELPERS ============
 
-/**
- * Format file size: bytes → "1.5 MB"
- */
 export const formatFileSize = (bytes) => {
   if (!bytes || bytes === 0) return "0 B";
   const k = 1024;
@@ -551,9 +505,6 @@ export const formatFileSize = (bytes) => {
   return `${Math.round((bytes / Math.pow(k, i)) * 100) / 100} ${sizes[i]}`;
 };
 
-/**
- * Format duration: seconds → "1:30"
- */
 export const formatDuration = (seconds) => {
   if (!seconds || isNaN(seconds)) return "0:00";
   const mins = Math.floor(seconds / 60);
@@ -561,9 +512,6 @@ export const formatDuration = (seconds) => {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 };
 
-/**
- * Get file icon name based on extension
- */
 export const getFileIcon = (filename) => {
   if (!filename) return "file";
   const ext = filename.split(".").pop().toLowerCase();

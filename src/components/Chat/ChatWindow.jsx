@@ -886,6 +886,7 @@ export default function ChatWindow({ conversation }) {
       {/* Search Modal */}
       {showSearch && (
         <MessageSearch
+          conversationId={conversation._id}
           onResultClick={handleJumpToMessage}
           onClose={() => setShowSearch(false)}
         />
