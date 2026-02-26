@@ -1,7 +1,7 @@
 // Đường dẫn: src/components/Chat/ChatLayout.jsx
-// UPDATED: Phase 2 - fix crash on leave, safe participant filter
+// UPDATED: Phase 2 socket - group_created, group_added, group_removed, group_left_self, group_request_added
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { MessageCircle, Search, Plus, Users } from 'lucide-react';
 import { getConversations } from '../../services/chatService';
 import ConversationList from './ConversationList';
@@ -10,6 +10,7 @@ import CreateGroupModal from './CreateGroupModal';
 import ChatWindow from './ChatWindow';
 import { chatLayoutStyles as styles } from '../../styles/chatStyles';
 import socketService from '../../services/socketService';
+import { getCurrentUserId } from '../../utils/chatHelpers';
 
 export default function ChatLayout() {
   const [conversations, setConversations] = useState([]);
@@ -22,6 +23,12 @@ export default function ChatLayout() {
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const plusMenuRef = useRef(null);
+  const selectedConvRef = useRef(null);
+
+  // Keep ref in sync so socket handlers can read latest value
+  useEffect(() => { selectedConvRef.current = selectedConversation; }, [selectedConversation]);
+
+  const currentUserId = getCurrentUserId();
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -44,6 +51,83 @@ export default function ChatLayout() {
     fetchConversations();
     return () => { socketService.disconnect(); };
   }, []);
+
+  // ── Register group socket handlers ──────────────────────────────────────
+  useEffect(() => {
+    // 1. Nhóm mới tạo → người được thêm nhận qua user room
+    const handleGroupCreated = (data) => {
+      const { conversation } = data;
+      setConversations(prev => {
+        if (prev.some(c => c._id === conversation._id)) return prev;
+        return [conversation, ...prev];
+      });
+    };
+
+    // 2. Được admin thêm vào nhóm có sẵn → nhận qua user room
+    const handleGroupAdded = (data) => {
+      const { conversation } = data;
+      setConversations(prev => {
+        if (prev.some(c => c._id === conversation._id)) return prev;
+        return [conversation, ...prev];
+      });
+    };
+
+    // 3. Bị admin xóa khỏi nhóm → nhận qua user room
+    const handleGroupRemoved = (data) => {
+      const { conversationId } = data;
+      setConversations(prev => prev.filter(c => c._id !== conversationId));
+      // Nếu đang mở nhóm đó → deselect
+      if (selectedConvRef.current?._id === conversationId) {
+        setSelectedConversation(null);
+      }
+    };
+
+    // 4. Tự rời nhóm → nhận qua user room (self-confirm)
+    const handleGroupLeftSelf = (data) => {
+      const { conversationId } = data;
+      setConversations(prev => prev.filter(c => c._id !== conversationId));
+      if (selectedConvRef.current?._id === conversationId) {
+        setSelectedConversation(null);
+      }
+    };
+
+    // 5. Request được accept → user mới nhận qua user room
+    const handleGroupRequestAdded = (data) => {
+      if (!data?.conversation) return;
+      const { conversation } = data;
+      setConversations(prev => {
+        if (prev.some(c => c._id === conversation._id)) return prev;
+        return [conversation, ...prev];
+      });
+    };
+
+    // 6. Member thêm user → admin/owner nhận qua user room
+    // Dùng CustomEvent để notify GroupInfo đang mở (nếu có)
+    const handleGroupJoinRequested = (data) => {
+      if (!data?.request) return;
+      // Dispatch custom event để GroupInfo (nếu đang mở) tự reload requests
+      window.dispatchEvent(new CustomEvent('group_join_requested', {
+        detail: { conversationId: data.conversationId || data.request?.conversationId }
+      }));
+    };
+
+    socketService.onGroupCreated(handleGroupCreated);
+    socketService.onGroupAdded(handleGroupAdded);
+    socketService.onGroupRemoved(handleGroupRemoved);
+    socketService.onGroupLeftSelf(handleGroupLeftSelf);
+    socketService.onGroupRequestAdded(handleGroupRequestAdded);
+    socketService.onGroupJoinRequested(handleGroupJoinRequested);
+
+    return () => {
+      socketService.off('group_created', handleGroupCreated);
+      socketService.off('group_added', handleGroupAdded);
+      socketService.off('group_removed', handleGroupRemoved);
+      socketService.off('group_left_self', handleGroupLeftSelf);
+      socketService.off('group_request_added', handleGroupRequestAdded);
+      socketService.off('group_join_requested', handleGroupJoinRequested);
+    };
+  }, []);
+  // ────────────────────────────────────────────────────────────────────────
 
   const fetchConversations = async () => {
     try {
@@ -72,24 +156,24 @@ export default function ChatLayout() {
     setSelectedConversation(newGroup);
   };
 
-  // null = left group / group deleted → deselect and refresh
+  // null = left/removed/deleted → go back to list
   const handleConversationUpdate = async (updated) => {
     if (updated === null) {
       setSelectedConversation(null);
       await fetchConversations();
       return;
     }
-    // Keep panel open, just merge new data
     setSelectedConversation(prev => prev ? { ...prev, ...updated } : prev);
-    fetchConversations(); // refresh sidebar in background
+    fetchConversations();
   };
 
   const filteredConversations = conversations.filter(conv => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
-    const nameMatch = conv.name?.toLowerCase().includes(q);
-    const participantMatch = conv.participants?.some(p => p.userId?.name?.toLowerCase().includes(q));
-    return nameMatch || participantMatch;
+    return (
+      conv.name?.toLowerCase().includes(q) ||
+      conv.participants?.some(p => p.userId?.name?.toLowerCase().includes(q))
+    );
   });
 
   const showSidebar = !isMobile || !selectedConversation;
@@ -105,7 +189,7 @@ export default function ChatLayout() {
               <h2 style={styles.appTitle}>Tin nhắn</h2>
             </div>
             <div ref={plusMenuRef} style={{ position: 'relative' }}>
-              <button onClick={() => setShowPlusMenu(!showPlusMenu)} style={styles.newChatButton} title="Tạo mới">
+              <button onClick={() => setShowPlusMenu(!showPlusMenu)} style={styles.newChatButton}>
                 <Plus size={18} />
               </button>
               {showPlusMenu && (
@@ -124,7 +208,7 @@ export default function ChatLayout() {
           <div style={styles.searchContainer}>
             <Search size={18} style={styles.searchIcon} />
             <input type="text" placeholder="Tìm kiếm cuộc hội thoại..." value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)} style={styles.searchInput} />
+              onChange={e => setSearchQuery(e.target.value)} style={styles.searchInput} />
           </div>
 
           <div style={styles.conversationsContainer}>

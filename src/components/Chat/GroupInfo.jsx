@@ -24,7 +24,7 @@ import { getCurrentUserId } from '../../utils/chatHelpers';
 const GROUP_TABS = ['Thành viên', 'Ảnh/Video', 'File', 'Link'];
 const PRIVATE_TABS = ['Thành viên', 'Ảnh/Video', 'File', 'Link'];
 
-export default function GroupInfo({ conversation, onClose, onConversationUpdate, onLeave }) {
+export default function GroupInfo({ conversation, onClose, onConversationUpdate, onLeave, reloadRef }) {
   const [activeTab, setActiveTab] = useState(0);
   const [info, setInfo] = useState(null);
   const [media, setMedia] = useState({});
@@ -48,28 +48,8 @@ export default function GroupInfo({ conversation, onClose, onConversationUpdate,
   })?.role;
   const isAdminOrOwner = currentUserRole === 'admin' || currentUserRole === 'owner';
 
-  useEffect(() => {
-    if (conversation?._id) loadInfo();
-  }, [conversation?._id]);
-
-  // Load requests AFTER info is loaded and role is known
-  useEffect(() => {
-    if (info && isGroup && isAdminOrOwner) {
-      getGroupRequests(conversation._id)
-        .then(setRequests)
-        .catch(() => setRequests([]));
-    }
-  }, [info, isAdminOrOwner]);
-
-  useEffect(() => {
-    setActionError('');
-    setActionSuccess('');
-    if (activeTab === 1 && Object.keys(media).length === 0) loadMedia();
-    if (activeTab === 2 && Object.keys(files).length === 0) loadFiles();
-    if (activeTab === 3 && Object.keys(links).length === 0) loadLinks();
-  }, [activeTab]);
-
-  const loadInfo = async () => {
+  // ── Khai báo tất cả load functions TRƯỚC useEffect ────────────────────────
+  const loadInfo = React.useCallback(async () => {
     setIsLoading(true);
     setError('');
     try {
@@ -80,7 +60,7 @@ export default function GroupInfo({ conversation, onClose, onConversationUpdate,
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [conversation._id]);
 
   const loadMedia = async () => {
     try { const d = await getConversationMedia(conversation._id); setMedia(d); } catch {}
@@ -92,6 +72,57 @@ export default function GroupInfo({ conversation, onClose, onConversationUpdate,
     try { const d = await getConversationLinks(conversation._id); setLinks(d); } catch {}
   };
 
+  // ── useEffect SAU khi tất cả functions đã được khai báo ─────────────────
+  useEffect(() => {
+    if (conversation?._id) loadInfo();
+  }, [conversation?._id]);
+
+  // Expose loadInfo ra ngoài qua reloadRef (ChatWindow dùng khi nhận socket events)
+  useEffect(() => {
+    if (reloadRef) reloadRef.current = loadInfo;
+  }, [reloadRef, loadInfo]);
+
+  // Khi ChatWindow update conversation qua socket → reload để lấy userId objects đầy đủ
+  useEffect(() => {
+    if (!conversation?._id || isLoading) return;
+    const newCount = conversation.participants?.length;
+    const currentCount = info?.participants?.length;
+    if (newCount !== currentCount && newCount !== undefined) {
+      loadInfo();
+    }
+  }, [conversation?.participants?.length]);
+
+  // Load requests AFTER info is loaded and role is known
+  useEffect(() => {
+    if (info && isGroup && isAdminOrOwner) {
+      getGroupRequests(conversation._id)
+        .then(setRequests)
+        .catch(() => setRequests([]));
+    }
+  }, [info, isAdminOrOwner]);
+
+  // Nhận CustomEvent từ ChatLayout khi có join request mới (user room event)
+  useEffect(() => {
+    if (!isGroup || !isAdminOrOwner) return;
+    const handleJoinRequestEvent = (e) => {
+      if (e.detail?.conversationId !== conversation._id) return;
+      // Reload requests list
+      getGroupRequests(conversation._id)
+        .then(setRequests)
+        .catch(() => {});
+    };
+    window.addEventListener('group_join_requested', handleJoinRequestEvent);
+    return () => window.removeEventListener('group_join_requested', handleJoinRequestEvent);
+  }, [conversation._id, isGroup, isAdminOrOwner]);
+
+  useEffect(() => {
+    setActionError('');
+    setActionSuccess('');
+    if (activeTab === 1 && Object.keys(media).length === 0) loadMedia();
+    if (activeTab === 2 && Object.keys(files).length === 0) loadFiles();
+    if (activeTab === 3 && Object.keys(links).length === 0) loadLinks();
+  }, [activeTab]);
+
   const showAction = (err, ok) => {
     setActionError(err || '');
     setActionSuccess(ok || '');
@@ -102,7 +133,8 @@ export default function GroupInfo({ conversation, onClose, onConversationUpdate,
     setActionError(''); setActionSuccess('');
     try {
       const updated = await removeGroupMembers(conversation._id, userIds);
-      setInfo(updated);
+      // Re-fetch để có userId objects đầy đủ (API response chỉ trả string ID)
+      await loadInfo();
       onConversationUpdate?.(updated);
       showAction('', `Đã xóa ${userIds.length} thành viên`);
     } catch (err) {
@@ -118,7 +150,8 @@ export default function GroupInfo({ conversation, onClose, onConversationUpdate,
     setActionError(''); setActionSuccess('');
     try {
       const updated = await changeGroupMemberRole(conversation._id, userId, newRole);
-      setInfo(updated);
+      // Re-fetch để có userId objects đầy đủ
+      await loadInfo();
       onConversationUpdate?.(updated);
       showAction('', `Đã ${newRole === 'admin' ? 'thăng lên Admin' : 'hạ xuống Thành viên'}`);
     } catch (err) {
@@ -142,8 +175,9 @@ export default function GroupInfo({ conversation, onClose, onConversationUpdate,
     try {
       const result = await handleGroupRequest(conversation._id, requestId, action);
       setRequests(prev => prev.filter(r => r._id !== requestId));
-      if (result?.participants) {
-        setInfo(result);
+      if (action === 'accept' && result?.participants) {
+        // Re-fetch để có userId objects đầy đủ
+        await loadInfo();
         onConversationUpdate?.(result);
       }
       showAction('', action === 'accept' ? 'Đã chấp nhận yêu cầu' : 'Đã từ chối yêu cầu');
