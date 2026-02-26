@@ -1,10 +1,12 @@
 // Đường dẫn: src/components/Chat/ChatLayout.jsx
+// UPDATED: Phase 2 - fix crash on leave, safe participant filter
 
-import React, { useState, useEffect } from 'react';
-import { MessageCircle, Search, Plus } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { MessageCircle, Search, Plus, Users } from 'lucide-react';
 import { getConversations } from '../../services/chatService';
 import ConversationList from './ConversationList';
 import NewChatModal from './NewChatModal';
+import CreateGroupModal from './CreateGroupModal';
 import ChatWindow from './ChatWindow';
 import { chatLayoutStyles as styles } from '../../styles/chatStyles';
 import socketService from '../../services/socketService';
@@ -16,17 +18,31 @@ export default function ChatLayout() {
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
+  const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
+  const [showPlusMenu, setShowPlusMenu] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const plusMenuRef = useRef(null);
 
   useEffect(() => {
-    // Connect to socket when component mounts
-    socketService.connect();
-    
-    fetchConversations();
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
-    // Cleanup on unmount
-    return () => {
-      socketService.disconnect();
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (plusMenuRef.current && !plusMenuRef.current.contains(e.target)) {
+        setShowPlusMenu(false);
+      }
     };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    socketService.connect();
+    fetchConversations();
+    return () => { socketService.disconnect(); };
   }, []);
 
   const fetchConversations = async () => {
@@ -34,120 +50,122 @@ export default function ChatLayout() {
       setIsLoading(true);
       setError('');
       const data = await getConversations();
-      setConversations(data);
-    } catch (error) {
-      if (error.statusCode === 401) {
-        // Token hết hạn - không cần logout ở đây vì MainLayout sẽ handle
-        setError('Phiên đăng nhập hết hạn');
-      } else {
-        setError('Không thể tải danh sách hội thoại');
-      }
+      setConversations(Array.isArray(data) ? data : []);
+    } catch (err) {
+      if (err.statusCode === 401) setError('Phiên đăng nhập hết hạn');
+      else setError('Không thể tải danh sách hội thoại');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleConversationClick = (conversation) => {
-    setSelectedConversation(conversation);
+  const handleConversationClick = (conv) => setSelectedConversation(conv);
+  const handleBackToList = () => setSelectedConversation(null);
+
+  const handleConversationCreated = async (newConv) => {
+    await fetchConversations();
+    setSelectedConversation(newConv);
   };
 
-  const handleConversationCreated = async (newConversation) => {
-    // Refresh lại toàn bộ danh sách để có đầy đủ thông tin
+  const handleGroupCreated = async (newGroup) => {
     await fetchConversations();
-    
-    // Tìm conversation vừa tạo trong danh sách mới
-    // (vì API response có thể thiếu thông tin user details)
-    setSelectedConversation(prev => {
-      const found = conversations.find(c => c._id === newConversation._id);
-      return found || newConversation;
-    });
+    setSelectedConversation(newGroup);
+  };
+
+  // null = left group / group deleted → deselect and refresh
+  const handleConversationUpdate = async (updated) => {
+    if (updated === null) {
+      setSelectedConversation(null);
+      await fetchConversations();
+      return;
+    }
+    // Keep panel open, just merge new data
+    setSelectedConversation(prev => prev ? { ...prev, ...updated } : prev);
+    fetchConversations(); // refresh sidebar in background
   };
 
   const filteredConversations = conversations.filter(conv => {
     if (!searchQuery) return true;
-    
-    // Tìm theo tên người dùng trong participants
-    return conv.participants.some(p => 
-      p.userId.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const q = searchQuery.toLowerCase();
+    const nameMatch = conv.name?.toLowerCase().includes(q);
+    const participantMatch = conv.participants?.some(p => p.userId?.name?.toLowerCase().includes(q));
+    return nameMatch || participantMatch;
   });
 
+  const showSidebar = !isMobile || !selectedConversation;
+  const showChat = !isMobile || selectedConversation;
+
   return (
-    <div style={styles.container}>
-      {/* Sidebar - Danh sách conversations */}
-      <div style={styles.sidebar}>
-        {/* Header */}
-        <div style={styles.sidebarHeader}>
-          <div style={styles.logoSection}>
-            <MessageCircle size={28} color="#764ba2" />
-            <h2 style={styles.appTitle}>Tin nhắn</h2>
-          </div>
-          <button 
-            onClick={() => setIsNewChatModalOpen(true)} 
-            style={styles.newChatButton}
-            title="Tạo cuộc hội thoại mới"
-          >
-            <Plus size={18} />
-          </button>
-        </div>
-
-        {/* Search */}
-        <div style={styles.searchContainer}>
-          <Search size={18} style={styles.searchIcon} />
-          <input
-            type="text"
-            placeholder="Tìm kiếm cuộc hội thoại..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={styles.searchInput}
-          />
-        </div>
-
-        {/* Conversations List */}
-        <div style={styles.conversationsContainer}>
-          {isLoading ? (
-            <div style={styles.loadingContainer}>
-              <div style={styles.spinner}>⟳</div>
-              <p style={styles.loadingText}>Đang tải...</p>
+    <div style={{ ...styles.container, ...(isMobile ? { flexDirection: 'column' } : {}) }}>
+      {showSidebar && (
+        <div style={{ ...styles.sidebar, ...(isMobile ? { width: '100%', height: '100%' } : {}) }}>
+          <div style={styles.sidebarHeader}>
+            <div style={styles.logoSection}>
+              <MessageCircle size={28} color="#764ba2" />
+              <h2 style={styles.appTitle}>Tin nhắn</h2>
             </div>
-          ) : error ? (
-            <div style={styles.errorContainer}>
-              <p style={styles.errorText}>{error}</p>
-              <button onClick={fetchConversations} style={styles.retryButton}>
-                Thử lại
+            <div ref={plusMenuRef} style={{ position: 'relative' }}>
+              <button onClick={() => setShowPlusMenu(!showPlusMenu)} style={styles.newChatButton} title="Tạo mới">
+                <Plus size={18} />
               </button>
+              {showPlusMenu && (
+                <div style={plusMenuStyle.menu}>
+                  <button onClick={() => { setIsNewChatModalOpen(true); setShowPlusMenu(false); }} style={plusMenuStyle.item}>
+                    <MessageCircle size={16} color="#764ba2" /><span>Tin nhắn mới</span>
+                  </button>
+                  <button onClick={() => { setIsCreateGroupModalOpen(true); setShowPlusMenu(false); }} style={plusMenuStyle.item}>
+                    <Users size={16} color="#10b981" /><span>Tạo nhóm</span>
+                  </button>
+                </div>
+              )}
             </div>
+          </div>
+
+          <div style={styles.searchContainer}>
+            <Search size={18} style={styles.searchIcon} />
+            <input type="text" placeholder="Tìm kiếm cuộc hội thoại..." value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)} style={styles.searchInput} />
+          </div>
+
+          <div style={styles.conversationsContainer}>
+            {isLoading ? (
+              <div style={styles.loadingContainer}>
+                <div style={styles.spinner}>⟳</div>
+                <p style={styles.loadingText}>Đang tải...</p>
+              </div>
+            ) : error ? (
+              <div style={styles.errorContainer}>
+                <p style={styles.errorText}>{error}</p>
+                <button onClick={fetchConversations} style={styles.retryButton}>Thử lại</button>
+              </div>
+            ) : (
+              <ConversationList conversations={filteredConversations} selectedConversation={selectedConversation} onConversationClick={handleConversationClick} />
+            )}
+          </div>
+        </div>
+      )}
+
+      {showChat && (
+        <div style={{ ...styles.chatArea, ...(isMobile ? { width: '100%', height: '100%' } : {}) }}>
+          {selectedConversation ? (
+            <ChatWindow conversation={selectedConversation} onBack={isMobile ? handleBackToList : undefined} onConversationUpdate={handleConversationUpdate} />
           ) : (
-            <ConversationList
-              conversations={filteredConversations}
-              selectedConversation={selectedConversation}
-              onConversationClick={handleConversationClick}
-            />
+            <div style={styles.chatPlaceholder}>
+              <MessageCircle size={64} color="#d1d5db" />
+              <h3 style={styles.placeholderTitle}>Chào mừng đến Chat App</h3>
+              <p style={styles.placeholderText}>Chọn một cuộc hội thoại để bắt đầu chat</p>
+            </div>
           )}
         </div>
-      </div>
+      )}
 
-      {/* Main Chat Area */}
-      <div style={styles.chatArea}>
-        {selectedConversation ? (
-          <ChatWindow conversation={selectedConversation} />
-        ) : (
-          <div style={styles.chatPlaceholder}>
-            <MessageCircle size={64} color="#d1d5db" />
-            <h3 style={styles.placeholderTitle}>Chào mừng đến Chat App</h3>
-            <p style={styles.placeholderText}>
-              Chọn một cuộc hội thoại để bắt đầu chat
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* New Chat Modal */}
-      <NewChatModal
-        isOpen={isNewChatModalOpen}
-        onClose={() => setIsNewChatModalOpen(false)}
-        onConversationCreated={handleConversationCreated}
-      />
+      <NewChatModal isOpen={isNewChatModalOpen} onClose={() => setIsNewChatModalOpen(false)} onConversationCreated={handleConversationCreated} />
+      <CreateGroupModal isOpen={isCreateGroupModalOpen} onClose={() => setIsCreateGroupModalOpen(false)} onGroupCreated={handleGroupCreated} />
     </div>
   );
 }
+
+const plusMenuStyle = {
+  menu: { position: 'absolute', right: 0, top: '100%', marginTop: 6, backgroundColor: 'white', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 6, minWidth: 180, zIndex: 100, border: '1px solid #f3f4f6' },
+  item: { display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 14px', border: 'none', backgroundColor: 'transparent', cursor: 'pointer', fontSize: 14, color: '#374151', borderRadius: 7, textAlign: 'left' },
+};
