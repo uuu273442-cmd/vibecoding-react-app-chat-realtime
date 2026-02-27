@@ -36,11 +36,6 @@ class SocketService {
       console.log('✅ Socket connected:', this.socket.id);
     });
 
-    // DEBUG: log tất cả socket events (xóa khi production)
-    this.socket.onAny((eventName, data) => {
-      console.log(`🔌 [SOCKET] ${eventName}:`, JSON.stringify(data, null, 2));
-    });
-
     this.socket.on('disconnect', (reason) => {
       console.log('❌ Socket disconnected:', reason);
     });

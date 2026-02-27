@@ -152,13 +152,20 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
       handleNewMessage(message);
     };
 
-    const handleMessageSeen = ({ conversationId, userId }) => {
-      if (conversationId !== conversation._id || userId === currentUserId) return;
+    const handleMessageSeen = ({ conversationId, messageId, seenBy }) => {
+      if (conversationId !== conversation._id) return;
+      if (!seenBy || seenBy._id === currentUserId) return;
       setMessages(prev => prev.map(msg => {
-        const isMine = (typeof msg.senderId === 'string' ? msg.senderId : msg.senderId?._id) === currentUserId;
-        if (!isMine) return msg;
-        const ids = msg.seenBy?.map(sb => typeof sb === 'string' ? sb : sb._id) || [];
-        return ids.includes(userId) ? msg : { ...msg, seenBy: [...(msg.seenBy || []), userId] };
+        // Xóa seenBy user này khỏi message cũ (avatar di chuyển)
+        const filtered = (msg.seenBy || []).filter(sb => {
+          const id = typeof sb === 'string' ? sb : sb._id;
+          return id !== seenBy._id;
+        });
+        if (msg._id === messageId) {
+          // Thêm vào message mới nhất user đã đọc
+          return { ...msg, seenBy: [...filtered, seenBy] };
+        }
+        return { ...msg, seenBy: filtered };
       }));
     };
 
@@ -624,6 +631,15 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
                           const prevId = typeof prev.senderId === 'string' ? prev.senderId : prev.senderId?._id;
                           const curId = typeof message.senderId === 'string' ? message.senderId : message.senderId?._id;
                           return prevId !== curId;
+                        })()}
+                        seenAvatars={(() => {
+                          // Chỉ hiện avatars trên message của mình
+                          const isOwn = (typeof message.senderId === 'string' ? message.senderId : message.senderId?._id) === currentUserId;
+                          if (!isOwn) return [];
+                          return (message.seenBy || []).filter(sb => {
+                            const id = typeof sb === 'string' ? sb : sb._id;
+                            return id !== currentUserId;
+                          });
                         })()}
                         onContextMenu={handleContextMenu}
                         onAddReaction={handleAddReaction}

@@ -17,6 +17,7 @@ export default function MessageBubble({
   message, 
   isOwn, 
   showAvatar,
+  seenAvatars = [],
   onContextMenu,
   onAddReaction,
   onRemoveReaction
@@ -219,7 +220,7 @@ export default function MessageBubble({
           
           {isOwn && !isDeleted && (
             <span style={styles.seenIndicator}>
-              {isSeenByOther ? (
+              {seenAvatars.length > 0 ? (
                 <CheckCheck size={14} color="#10b981" />
               ) : (
                 <Check size={14} color="#9ca3af" />
@@ -228,6 +229,70 @@ export default function MessageBubble({
           )}
         </div>
       </div>
+
+      {/* Seen avatars — Messenger style */}
+      {isOwn && seenAvatars.length > 0 && (
+        <div style={seenStyle.row}>
+          {seenAvatars.slice(0, 5).map((user, i) => {
+            const id = typeof user === 'string' ? user : user._id;
+            const name = typeof user === 'object' ? user.name : '';
+            const avatar = typeof user === 'object' ? user.avatar : null;
+            return (
+              <div key={id || i} title={name} style={seenStyle.avatarWrap}>
+                {avatar ? (
+                  <img src={avatar} alt={name} style={seenStyle.avatar} />
+                ) : (
+                  <div style={seenStyle.avatarFallback}>
+                    {name?.charAt(0)?.toUpperCase() || '?'}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {seenAvatars.length > 5 && (
+            <div style={{ ...seenStyle.avatarFallback, fontSize: 8 }}>
+              +{seenAvatars.length - 5}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
+
+const seenStyle = {
+  row: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 2,
+    paddingRight: 4,
+    marginTop: 2,
+    marginBottom: 2,
+  },
+  avatarWrap: {
+    width: 14,
+    height: 14,
+    borderRadius: '50%',
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  avatar: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+  },
+  avatarFallback: {
+    width: 14,
+    height: 14,
+    borderRadius: '50%',
+    background: 'linear-gradient(135deg,#667eea,#764ba2)',
+    color: 'white',
+    fontSize: 7,
+    fontWeight: 700,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+};
