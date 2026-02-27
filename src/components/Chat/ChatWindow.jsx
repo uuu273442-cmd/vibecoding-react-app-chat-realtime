@@ -14,6 +14,7 @@ import {
 import { getConversationName, getConversationStatus, getConversationAvatar, getCurrentUserId } from '../../utils/chatHelpers';
 import { chatWindowStyles as styles } from '../../styles/chatStyles';
 import MessageBubble from './MessageBubble';
+import SystemMessage from './SystemMessage';
 import ReplyPreview from './ReplyPreview';
 import MessageContextMenu from './MessageContextMenu';
 import EditMessageModal from './EditMessageModal';
@@ -203,6 +204,21 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
       });
     };
 
+    // System messages (group events: add member, remove, role change, leave...)
+    const handleSystemMessages = (messages) => {
+      if (!Array.isArray(messages) || messages.length === 0) return;
+      // Chỉ xử lý messages thuộc conversation hiện tại
+      const relevant = messages.filter(m => m.conversationId === conversation._id);
+      if (relevant.length === 0) return;
+      setMessages(prev => {
+        const existingIds = new Set(prev.map(m => m._id));
+        const newMsgs = relevant.filter(m => !existingIds.has(m._id));
+        if (newMsgs.length === 0) return prev;
+        return [...prev, ...newMsgs];
+      });
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+    };
+
     const handleMessagePinned = ({ messageId, isPinned, pinByUser, pinnedAt }) => {
       setMessages(prev => prev.map(m => m._id === messageId ? { ...m, isPinned, pinByUser, pinnedAt } : m));
     };
@@ -275,6 +291,7 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
     };
 
     // Register all
+    socketService.on('message_system_room', handleSystemMessages);
     socketService.on('new_message', handleNewMessage);
     socketService.on('message_reacted', handleMessageReacted);
     socketService.on('message_edited', handleMessageEdited);
@@ -299,6 +316,7 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
 
     return () => {
       socketService.leaveConversation(conversation._id);
+      socketService.off('message_system_room', handleSystemMessages);
       socketService.off('new_message', handleNewMessage);
       socketService.off('message_reacted', handleMessageReacted);
       socketService.off('message_edited', handleMessageEdited);
@@ -506,7 +524,10 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
   const name = getConversationName(localConversation);
   const status = getConversationStatus(localConversation);
   const avatar = getConversationAvatar(localConversation);
-  const visibleMessages = messages.filter(msg => !msg.deletedFor?.includes(currentUserId));
+  const visibleMessages = messages.filter(msg => {
+    if (msg.type === 'system') return true; // System messages luôn hiển thị
+    return !msg.deletedFor?.includes(currentUserId);
+  });
   const existingMemberIds = localConversation.participants?.map(p =>
     typeof p.userId === 'string' ? p.userId : p.userId?._id
   ).filter(Boolean) || [];
@@ -590,14 +611,25 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
               <>
                 {visibleMessages.map((message, index) => (
                   <div key={message._id} id={`message-${message._id}`}>
-                    <MessageBubble
-                      message={message}
-                      isOwn={(typeof message.senderId === 'string' ? message.senderId : message.senderId?._id) === currentUserId}
-                      showAvatar={index === 0 || (typeof visibleMessages[index - 1].senderId === 'string' ? visibleMessages[index - 1].senderId : visibleMessages[index - 1].senderId?._id) !== (typeof message.senderId === 'string' ? message.senderId : message.senderId?._id)}
-                      onContextMenu={handleContextMenu}
-                      onAddReaction={handleAddReaction}
-                      onRemoveReaction={handleRemoveReaction}
-                    />
+                    {message.type === 'system' ? (
+                      <SystemMessage message={message} />
+                    ) : (
+                      <MessageBubble
+                        message={message}
+                        isOwn={(typeof message.senderId === 'string' ? message.senderId : message.senderId?._id) === currentUserId}
+                        showAvatar={(() => {
+                          if (index === 0) return true;
+                          const prev = visibleMessages[index - 1];
+                          if (prev.type === 'system') return true;
+                          const prevId = typeof prev.senderId === 'string' ? prev.senderId : prev.senderId?._id;
+                          const curId = typeof message.senderId === 'string' ? message.senderId : message.senderId?._id;
+                          return prevId !== curId;
+                        })()}
+                        onContextMenu={handleContextMenu}
+                        onAddReaction={handleAddReaction}
+                        onRemoveReaction={handleRemoveReaction}
+                      />
+                    )}
                   </div>
                 ))}
                 {typingUsers.size > 0 && (
