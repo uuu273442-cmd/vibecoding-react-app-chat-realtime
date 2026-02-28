@@ -842,7 +842,7 @@ export const messageBubbleStyles = {
   container: {
     display: "flex",
     gap: "8px",
-    marginBottom: "8px",
+    marginBottom: "2px",
   },
 
   containerOwn: {
@@ -873,6 +873,7 @@ export const messageBubbleStyles = {
   avatarSpacer: {
     width: "28px",
     flexShrink: 0,
+    visibility: "hidden",
   },
 
   messageWrapper: {

@@ -109,20 +109,24 @@ export default function ToastNotification({ onNavigate }) {
   useEffect(() => {
     // ── Friend events ──────────────────────────────────────────────────────
     const handleFriendRequest = (data) => {
+      if (!data?.request) return;
       addToast({
         type: 'friend_request',
         title: 'Lời mời kết bạn',
-        message: `${data.from?.name || 'Ai đó'} đã gửi lời mời kết bạn`,
+        message: `${data.request.from?.name || 'Ai đó'} đã gửi lời mời kết bạn`,
         onClick: () => onNavigate?.('/friends'),
       });
     };
 
     const handleFriendAccepted = (data) => {
+      if (!data?.friend) return;
       addToast({
         type: 'friend_accepted',
         title: 'Kết bạn thành công',
-        message: `${data.user?.name || 'Ai đó'} đã chấp nhận lời mời kết bạn`,
-        onClick: () => onNavigate?.('/friends'),
+        message: `${data.friend.name} đã chấp nhận lời mời kết bạn`,
+        onClick: () => data.conversationId
+          ? onNavigate?.('/chat', { conversationId: data.conversationId })
+          : onNavigate?.('/friends'),
       });
     };
 

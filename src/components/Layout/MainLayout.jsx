@@ -1,72 +1,142 @@
 // Đường dẫn: src/components/Layout/MainLayout.jsx
-// UPDATED: Phase 2 - mount ToastNotification with navigation support
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { MessageCircle, Users, LogOut } from 'lucide-react';
 import { logoutUser } from '../../services/authService';
+import { getFriendRequests } from '../../services/friendsService';
 import { mainLayoutStyles as styles } from '../../styles/layoutStyles';
-import ToastNotification from '../ToastNotification';
+import socketService from '../../services/socketService';
 
 export default function MainLayout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const [friendRequestCount, setFriendRequestCount] = useState(0);
+  const [friendRequestsCount, setFriendRequestsCount] = useState(0);
 
-  const navItems = [
-    { icon: <MessageCircle size={22} />, label: 'Chat', path: '/chat' },
-    { icon: <Users size={22} />, label: 'Bạn bè', path: '/friends', badge: friendRequestCount },
-  ];
+  useEffect(() => {
+    // Fetch initial friend requests count
+    fetchFriendRequestsCount();
+
+    // Setup socket listeners for real-time updates
+    setupSocketListeners();
+
+    return () => {
+      cleanupSocketListeners();
+    };
+  }, []);
+
+  const fetchFriendRequestsCount = async () => {
+    try {
+      const requests = await getFriendRequests();
+      setFriendRequestsCount(requests.length);
+    } catch (error) {
+      console.error('Error fetching friend requests:', error);
+    }
+  };
+
+  const setupSocketListeners = () => {
+    // Nhận lời mời kết bạn mới → tăng badge
+    socketService.onFriendRequestReceived((data) => {
+      if (!data?.request) return;
+      setFriendRequestsCount(prev => prev + 1);
+    });
+
+    // Request được accept → không ảnh hưởng badge (badge chỉ đếm incoming requests)
+    socketService.onFriendRequestAccepted((_data) => {});
+
+    socketService.onFriendRequestRejected((_data) => {});
+  };
+
+  const cleanupSocketListeners = () => {
+    socketService.removeAllListeners('friend_request_received');
+    socketService.removeAllListeners('friend_request_accepted');
+    socketService.removeAllListeners('friend_request_rejected');
+  };
 
   const handleLogout = async () => {
     try {
       await logoutUser();
-    } catch {}
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    navigate('/login');
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      navigate('/login');
+    }
   };
 
-  // Toast navigation handler
-  const handleToastNavigate = (path, conversation) => {
-    if (path) navigate(path);
-    // conversation param available for future deep-link (e.g. open specific group)
+  const handleNavClick = (path) => {
+    navigate(path);
+    
+    // Reset badge count when navigating to Friends page
+    if (path === '/friends') {
+      setFriendRequestsCount(0);
+    }
   };
+
+  const navItems = [
+    {
+      icon: MessageCircle,
+      label: 'Chat',
+      path: '/chat',
+      badge: 0,
+    },
+    {
+      icon: Users,
+      label: 'Bạn bè',
+      path: '/friends',
+      badge: friendRequestsCount,
+    },
+  ];
 
   return (
     <div style={styles.container}>
       {/* Sidebar */}
       <div style={styles.sidebar}>
+        {/* Logo */}
         <div style={styles.logo}>
           <div style={styles.logoIcon}>
             <MessageCircle size={24} color="white" />
           </div>
         </div>
 
-        <nav style={styles.nav}>
-          {navItems.map((item) => (
-            <button
-              key={item.path}
-              onClick={() => navigate(item.path)}
-              style={{
-                ...styles.navItem,
-                ...(location.pathname === item.path ? styles.navItemActive : {}),
-              }}
-            >
-              <div style={styles.iconWrapper}>
-                {item.icon}
-                {item.badge > 0 && (
-                  <span style={styles.badge}>{item.badge > 99 ? '99+' : item.badge}</span>
-                )}
-              </div>
-              <span style={styles.navLabel}>{item.label}</span>
-            </button>
-          ))}
-        </nav>
+        {/* Navigation */}
+        <div style={styles.nav}>
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = location.pathname === item.path;
+            
+            return (
+              <button
+                key={item.path}
+                onClick={() => handleNavClick(item.path)}
+                style={{
+                  ...styles.navItem,
+                  ...(isActive ? styles.navItemActive : {})
+                }}
+                title={item.label}
+              >
+                {/* Icon with badge */}
+                <div style={styles.iconWrapper}>
+                  <Icon size={24} />
+                  {item.badge > 0 && (
+                    <div style={styles.badge}>
+                      {item.badge > 99 ? '99+' : item.badge}
+                    </div>
+                  )}
+                </div>
+                <span style={styles.navLabel}>{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
 
+        {/* Logout */}
         <div style={styles.sidebarFooter}>
-          <button onClick={handleLogout} style={styles.logoutButton} title="Đăng xuất">
-            <LogOut size={22} />
+          <button
+            onClick={handleLogout}
+            style={styles.logoutButton}
+            title="Đăng xuất"
+          >
+            <LogOut size={24} />
           </button>
         </div>
       </div>
@@ -75,9 +145,6 @@ export default function MainLayout({ children }) {
       <div style={styles.mainContent}>
         {children}
       </div>
-
-      {/* Toast Notifications — mounted once at layout level */}
-      <ToastNotification onNavigate={handleToastNavigate} />
     </div>
   );
 }

@@ -56,36 +56,35 @@ export default function FriendsPage() {
   // ============ SOCKET EVENT HANDLERS ============
 
   const handleFriendRequestReceived = (data) => {
-    console.log('🔔 Friend request received:', data);
-    
-    // Add to requests list
-    setRequests(prev => [data, ...prev]);
-    
-    // Show toast notification
+    if (!data?.request) return;
+    const { request } = data;
+
+    // Thêm vào danh sách requests (tránh duplicate)
+    setRequests(prev => prev.some(r => r._id === request._id) ? prev : [request, ...prev]);
+
     showToast({
       type: 'friend_request_received',
       title: 'Lời mời kết bạn mới',
-      message: `${data.from.name} muốn kết bạn với bạn`,
+      message: `${request.from?.name || 'Ai đó'} muốn kết bạn với bạn`,
     });
 
-    // Play notification sound (optional)
     playNotificationSound();
   };
 
   const handleFriendRequestAccepted = (data) => {
-    console.log('✅ Friend request accepted:', data);
-    
-    // Add to friends list
-    setFriends(prev => [data.user, ...prev]);
-    
-    // Show toast notification
+    if (!data?.friend) return;
+    const { friend, conversationId } = data;
+
+    // Thêm vào danh sách bạn bè (tránh duplicate)
+    setFriends(prev => prev.some(f => f._id === friend._id) ? prev : [friend, ...prev]);
+
     showToast({
       type: 'friend_request_accepted',
-      title: 'Đã chấp nhận lời mời',
-      message: `${data.user.name} đã chấp nhận lời mời kết bạn của bạn`,
+      title: 'Kết bạn thành công',
+      message: `${friend.name} đã chấp nhận lời mời kết bạn của bạn`,
+      conversationId, // Dùng để navigate vào chat khi click toast
     });
 
-    // Play notification sound (optional)
     playNotificationSound();
   };
 

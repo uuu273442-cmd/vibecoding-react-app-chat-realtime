@@ -632,8 +632,20 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
                           const curId = typeof message.senderId === 'string' ? message.senderId : message.senderId?._id;
                           return prevId !== curId;
                         })()}
+                        isLastMessage={(() => {
+                          // Tin nhắn cuối cùng của chính mình trong toàn bộ list
+                          const msgId = typeof message.senderId === 'string' ? message.senderId : message.senderId?._id;
+                          if (msgId !== currentUserId) return false;
+                          // Tìm index của own message cuối cùng
+                          for (let i = visibleMessages.length - 1; i >= 0; i--) {
+                            const m = visibleMessages[i];
+                            if (m.type === 'system') continue;
+                            const mId = typeof m.senderId === 'string' ? m.senderId : m.senderId?._id;
+                            if (mId === currentUserId) return m._id === message._id;
+                          }
+                          return false;
+                        })()}
                         seenAvatars={(() => {
-                          // Chỉ hiện avatars trên message của mình
                           const isOwn = (typeof message.senderId === 'string' ? message.senderId : message.senderId?._id) === currentUserId;
                           if (!isOwn) return [];
                           return (message.seenBy || []).filter(sb => {

@@ -1,7 +1,7 @@
 // Đường dẫn: src/components/Chat/MessageBubble.jsx
 // FIXED: Handle missing attachments safely
 
-import React from 'react';
+import React, { useState } from 'react';
 import { User, Check, CheckCheck, CornerDownRight } from 'lucide-react';
 import { messageBubbleStyles as styles } from '../../styles/chatStyles';
 import { getCurrentUserId } from '../../utils/chatHelpers';
@@ -18,12 +18,14 @@ export default function MessageBubble({
   isOwn, 
   showAvatar,
   seenAvatars = [],
+  isLastMessage = false,
   onContextMenu,
   onAddReaction,
   onRemoveReaction
 }) {
   const currentUserId = getCurrentUserId();
-  
+  const [isHovered, setIsHovered] = useState(false);
+
   const formatTime = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleTimeString('vi-VN', { 
@@ -132,6 +134,8 @@ export default function MessageBubble({
         ...styles.container,
         ...(isOwn ? styles.containerOwn : {})
       }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       onContextMenu={(e) => onContextMenu?.(e, message)}
     >
       {/* Avatar */}
@@ -197,8 +201,8 @@ export default function MessageBubble({
           {renderMessageContent()}
         </div>
 
-        {/* Reactions */}
-        {!isDeleted && (
+        {/* Reactions — chỉ hiện khi hover hoặc đã có reactions */}
+        {!isDeleted && (isHovered || (message.reactions && message.reactions.length > 0)) && (
           <MessageReactions
             message={message}
             onAddReaction={onAddReaction}
@@ -217,7 +221,6 @@ export default function MessageBubble({
               <span style={styles.editedBadge}> (edited)</span>
             )}
           </span>
-          
           {isOwn && !isDeleted && (
             <span style={styles.seenIndicator}>
               {seenAvatars.length > 0 ? (
@@ -228,63 +231,59 @@ export default function MessageBubble({
             </span>
           )}
         </div>
-      </div>
 
-      {/* Seen avatars — Messenger style */}
-      {isOwn && seenAvatars.length > 0 && (
-        <div style={seenStyle.row}>
-          {seenAvatars.slice(0, 5).map((user, i) => {
-            const id = typeof user === 'string' ? user : user._id;
-            const name = typeof user === 'object' ? user.name : '';
-            const avatar = typeof user === 'object' ? user.avatar : null;
-            return (
-              <div key={id || i} title={name} style={seenStyle.avatarWrap}>
-                {avatar ? (
-                  <img src={avatar} alt={name} style={seenStyle.avatar} />
-                ) : (
-                  <div style={seenStyle.avatarFallback}>
-                    {name?.charAt(0)?.toUpperCase() || '?'}
-                  </div>
-                )}
+        {/* Seen avatars — chỉ hiện ở tin nhắn cuối cùng của mình */}
+        {isOwn && isLastMessage && seenAvatars.length > 0 && (
+          <div style={seenRowStyle.row}>
+            {seenAvatars.slice(0, 5).map((user, i) => {
+              const id = typeof user === 'string' ? user : user._id;
+              const name = typeof user === 'object' ? (user.name || '') : '';
+              const avatar = typeof user === 'object' ? user.avatar : null;
+              return (
+                <div key={id || i} title={name} style={seenRowStyle.wrap}>
+                  {avatar ? (
+                    <img src={avatar} alt={name} style={seenRowStyle.img} />
+                  ) : (
+                    <div style={seenRowStyle.fallback}>
+                      {name.charAt(0).toUpperCase() || '?'}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {seenAvatars.length > 5 && (
+              <div style={{ ...seenRowStyle.fallback, fontSize: 8 }}>
+                +{seenAvatars.length - 5}
               </div>
-            );
-          })}
-          {seenAvatars.length > 5 && (
-            <div style={{ ...seenStyle.avatarFallback, fontSize: 8 }}>
-              +{seenAvatars.length - 5}
-            </div>
-          )}
-        </div>
-      )}
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-const seenStyle = {
+const seenRowStyle = {
   row: {
     display: 'flex',
     justifyContent: 'flex-end',
     alignItems: 'center',
     gap: 2,
-    paddingRight: 4,
-    marginTop: 2,
-    marginBottom: 2,
+    paddingRight: 2,
+    marginTop: 1,
   },
-  avatarWrap: {
-    width: 14,
-    height: 14,
+  wrap: {
+    width: 14, height: 14,
     borderRadius: '50%',
     overflow: 'hidden',
     flexShrink: 0,
   },
-  avatar: {
-    width: '100%',
-    height: '100%',
+  img: {
+    width: '100%', height: '100%',
     objectFit: 'cover',
   },
-  avatarFallback: {
-    width: 14,
-    height: 14,
+  fallback: {
+    width: 14, height: 14,
     borderRadius: '50%',
     background: 'linear-gradient(135deg,#667eea,#764ba2)',
     color: 'white',
