@@ -29,6 +29,8 @@ import MessageSearch from './MessageSearch';
 import PinnedMessages from './PinnedMessages';
 import GroupInfo from './GroupInfo';
 import GroupMembersManager from './GroupMembersManager';
+import MentionInput from './MentionInput';
+import AnnouncementBanner from './AnnouncementBanner';
 import socketService from '../../services/socketService';
 
 // Helper: merge conversation data, preserve userId objects when socket sends only id strings
@@ -79,6 +81,10 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
   const [showSearch, setShowSearch] = useState(false);
   const [showGroupInfo, setShowGroupInfo] = useState(false);
   const [showAddMembers, setShowAddMembers] = useState(false);
+  const [showAnnouncement, setShowAnnouncement] = useState(true);
+
+  // ── Mention state ─────────────────────────────────────────────────────────
+  const [mentionIds, setMentionIds] = useState([]);
 
   // ── Conversation state (local copy for realtime updates) ─────────────────
   const [localConversation, setLocalConversation] = useState(conversation);
@@ -234,6 +240,22 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
       setMessages(prev => prev.map(m => m._id === messageId ? { ...m, isPinned: false, pinByUser: null, pinnedAt: null } : m));
     };
 
+    // Notification khi bị mention trong nhóm
+    const handleMentionReceived = ({ message, conversationId: convId }) => {
+      // Nếu đang ở đúng conversation → message đã được add qua new_message
+      // Nếu ở conversation khác → ChatLayout xử lý toast + badge
+    };
+
+    // Admin tạo announcement mới → reload banner
+    const handleAnnouncementCreated = (data) => {
+      if (!data?.announcement) return;
+      if (data.conversationId !== conversation._id) return;
+      // Dispatch để AnnouncementBanner tự reload
+      window.dispatchEvent(new CustomEvent('announcement_created', {
+        detail: { conversationId: conversation._id, announcement: data.announcement }
+      }));
+    };
+
     // ── Phase 2: group events ────────────────────────────────────────────
 
     // Helper: reload GroupInfo nếu đang mở
@@ -313,6 +335,8 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
     socketService.on('new_message_linkPreview', handleLinkPreview);
     socketService.on('message_pinned', handleMessagePinned);
     socketService.on('message_unpinned', handleMessageUnpinned);
+    socketService.on('mention_received', handleMentionReceived);
+    socketService.on('announcement_created', handleAnnouncementCreated);
     // Group
     socketService.on('group_member_added', handleGroupMemberAdded);
     socketService.on('group_member_removed', handleGroupMemberRemoved);
@@ -338,6 +362,8 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
       socketService.off('new_message_linkPreview', handleLinkPreview);
       socketService.off('message_pinned', handleMessagePinned);
       socketService.off('message_unpinned', handleMessageUnpinned);
+      socketService.off('mention_received', handleMentionReceived);
+      socketService.off('announcement_created', handleAnnouncementCreated);
       socketService.off('group_member_added', handleGroupMemberAdded);
       socketService.off('group_member_removed', handleGroupMemberRemoved);
       socketService.off('group_member_left', handleGroupMemberLeft);
@@ -416,9 +442,10 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
     if (!content) return;
     setIsSending(true);
     try {
-      await sendMessageWithReply(conversation._id, content, replyTo?._id || null);
+      await sendMessageWithReply(conversation._id, content, replyTo?._id || null, mentionIds.length > 0 ? mentionIds : null);
       setInputMessage('');
       setReplyTo(null);
+      setMentionIds([]);
       socketService.stopTyping(conversation._id);
     } catch {
       alert('Không thể gửi tin nhắn. Vui lòng thử lại!');
@@ -510,9 +537,10 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
     finally { setIsUploading(false); setUploadProgress(0); setUploadingFileName(''); }
   };
 
-  const handleInputChange = (e) => {
-    setInputMessage(e.target.value);
-    if (e.target.value.trim()) {
+  const handleInputChange = (text, ids) => {
+    setInputMessage(text);
+    if (ids !== undefined) setMentionIds(ids);
+    if (text.trim()) {
       socketService.startTyping(conversation._id);
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = setTimeout(() => socketService.stopTyping(conversation._id), 2000);
@@ -583,6 +611,21 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
           </button>
         </div>
       </div>
+
+      {/* Announcement Banner — chỉ hiện với group */}
+      {isGroup && showAnnouncement && (
+        <AnnouncementBanner
+          conversationId={conversation._id}
+          isAdminOrOwner={(() => {
+            const me = localConversation?.participants?.find(p => {
+              const uid = typeof p.userId === 'string' ? p.userId : p.userId?._id;
+              return uid === currentUserId;
+            });
+            return me?.role === 'admin' || me?.role === 'owner';
+          })()}
+          onClose={() => setShowAnnouncement(false)}
+        />
+      )}
 
       {/* Pinned */}
       {pinnedMessages.length > 0 && (
@@ -683,8 +726,23 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
       {/* Input */}
       <div style={styles.inputContainer}>
         <UploadButton onFileClick={() => setIsFileUploadOpen(true)} onMediaClick={() => setIsMediaUploadOpen(true)} onVoiceClick={() => setIsVoiceRecording(true)} />
-        <input ref={inputRef} type="text" placeholder="Nhập tin nhắn..." value={inputMessage}
-          onChange={handleInputChange} onKeyPress={handleKeyPress} style={styles.input} disabled={isSending} />
+        {isGroup ? (
+          <MentionInput
+            inputRef={inputRef}
+            value={inputMessage}
+            onChange={handleInputChange}
+            onKeyPress={handleKeyPress}
+            participants={localConversation?.participants || []}
+            currentUserId={currentUserId}
+            disabled={isSending}
+            style={styles.input}
+            placeholder="Nhập tin nhắn... (@mention)"
+          />
+        ) : (
+          <input ref={inputRef} type="text" placeholder="Nhập tin nhắn..." value={inputMessage}
+            onChange={e => handleInputChange(e.target.value)}
+            onKeyPress={handleKeyPress} style={styles.input} disabled={isSending} />
+        )}
         <button onClick={handleSendMessage} disabled={!inputMessage.trim() || isSending}
           style={{ ...styles.sendButton, ...((!inputMessage.trim() || isSending) ? styles.sendButtonDisabled : {}) }}>
           {isSending ? <span style={styles.spinner}>⟳</span> : <Send size={20} />}

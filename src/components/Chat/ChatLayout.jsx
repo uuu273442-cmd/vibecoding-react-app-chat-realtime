@@ -22,6 +22,7 @@ export default function ChatLayout() {
   const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [mentionToast, setMentionToast] = useState(null); // { senderName, content, convId }
   const plusMenuRef = useRef(null);
   const selectedConvRef = useRef(null);
 
@@ -29,6 +30,11 @@ export default function ChatLayout() {
   useEffect(() => { selectedConvRef.current = selectedConversation; }, [selectedConversation]);
 
   const currentUserId = getCurrentUserId();
+
+  const showMentionToast = (senderName, content, convId) => {
+    setMentionToast({ senderName, content, convId });
+    setTimeout(() => setMentionToast(null), 4000);
+  };
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -55,8 +61,10 @@ export default function ChatLayout() {
   // ── Register group socket handlers ──────────────────────────────────────
   useEffect(() => {
     // 1. Nhóm mới tạo → người được thêm nhận qua user room
+    // payload: { conversation, createdBy: { _id, name } }
     const handleGroupCreated = (data) => {
       const { conversation } = data;
+      if (!conversation) return;
       setConversations(prev => {
         if (prev.some(c => c._id === conversation._id)) return prev;
         return [conversation, ...prev];
@@ -64,8 +72,10 @@ export default function ChatLayout() {
     };
 
     // 2. Được admin thêm vào nhóm có sẵn → nhận qua user room
+    // payload: { conversationId, addedUsers, addedBy, conversation }
     const handleGroupAdded = (data) => {
       const { conversation } = data;
+      if (!conversation) return;
       setConversations(prev => {
         if (prev.some(c => c._id === conversation._id)) return prev;
         return [conversation, ...prev];
@@ -73,18 +83,21 @@ export default function ChatLayout() {
     };
 
     // 3. Bị admin xóa khỏi nhóm → nhận qua user room
+    // payload: { conversationId, removedUserIds, removedBy, conversation }
     const handleGroupRemoved = (data) => {
       const { conversationId } = data;
+      if (!conversationId) return;
       setConversations(prev => prev.filter(c => c._id !== conversationId));
-      // Nếu đang mở nhóm đó → deselect
       if (selectedConvRef.current?._id === conversationId) {
         setSelectedConversation(null);
       }
     };
 
     // 4. Tự rời nhóm → nhận qua user room (self-confirm)
+    // payload: { conversationId, leftUser, conversation }
     const handleGroupLeftSelf = (data) => {
       const { conversationId } = data;
+      if (!conversationId) return;
       setConversations(prev => prev.filter(c => c._id !== conversationId));
       if (selectedConvRef.current?._id === conversationId) {
         setSelectedConversation(null);
@@ -92,9 +105,10 @@ export default function ChatLayout() {
     };
 
     // 5. Request được accept → user mới nhận qua user room
+    // payload: { conversationId, requestId, action, handledBy, conversation }
     const handleGroupRequestAdded = (data) => {
-      if (!data?.conversation) return;
       const { conversation } = data;
+      if (!conversation) return;
       setConversations(prev => {
         if (prev.some(c => c._id === conversation._id)) return prev;
         return [conversation, ...prev];
@@ -102,13 +116,30 @@ export default function ChatLayout() {
     };
 
     // 6. Member thêm user → admin/owner nhận qua user room
-    // Dùng CustomEvent để notify GroupInfo đang mở (nếu có)
+    // payload: { conversationId, request }
     const handleGroupJoinRequested = (data) => {
       if (!data?.request) return;
-      // Dispatch custom event để GroupInfo (nếu đang mở) tự reload requests
       window.dispatchEvent(new CustomEvent('group_join_requested', {
         detail: { conversationId: data.conversationId || data.request?.conversationId }
       }));
+    };
+
+    // 7. Được mention trong nhóm → nhận qua user room (emitMentions)
+    // payload: { message, conversation: conversationId, mentions: [userId,...] }
+    const handleMentionReceived = (data) => {
+      const { message, conversation: convId } = data;
+      if (!message || !convId) return;
+      // Nếu đang mở đúng conversation đó → không cần notify thêm
+      if (selectedConvRef.current?._id === convId) return;
+      // Bump unreadCount + badge cho conversation đó trong sidebar
+      setConversations(prev => prev.map(c =>
+        c._id === convId
+          ? { ...c, unreadCount: (c.unreadCount || 0) + 1, hasMention: true }
+          : c
+      ));
+      // Toast notification
+      const senderName = message.senderId?.name || 'Ai đó';
+      showMentionToast(senderName, message.content, convId);
     };
 
     socketService.onGroupCreated(handleGroupCreated);
@@ -117,6 +148,7 @@ export default function ChatLayout() {
     socketService.onGroupLeftSelf(handleGroupLeftSelf);
     socketService.onGroupRequestAdded(handleGroupRequestAdded);
     socketService.onGroupJoinRequested(handleGroupJoinRequested);
+    socketService.on('mention_received', handleMentionReceived);
 
     return () => {
       socketService.off('group_created', handleGroupCreated);
@@ -125,6 +157,7 @@ export default function ChatLayout() {
       socketService.off('group_left_self', handleGroupLeftSelf);
       socketService.off('group_request_added', handleGroupRequestAdded);
       socketService.off('group_join_requested', handleGroupJoinRequested);
+      socketService.off('mention_received', handleMentionReceived);
     };
   }, []);
   // ────────────────────────────────────────────────────────────────────────
@@ -245,6 +278,26 @@ export default function ChatLayout() {
 
       <NewChatModal isOpen={isNewChatModalOpen} onClose={() => setIsNewChatModalOpen(false)} onConversationCreated={handleConversationCreated} />
       <CreateGroupModal isOpen={isCreateGroupModalOpen} onClose={() => setIsCreateGroupModalOpen(false)} onGroupCreated={handleGroupCreated} />
+
+      {/* Mention Toast */}
+      {mentionToast && (
+        <div style={mentionToastStyle.wrap} onClick={() => {
+          const conv = conversations.find(c => c._id === mentionToast.convId);
+          if (conv) setSelectedConversation(conv);
+          setMentionToast(null);
+        }}>
+          <div style={mentionToastStyle.icon}>@</div>
+          <div style={mentionToastStyle.body}>
+            <p style={mentionToastStyle.title}>{mentionToast.senderName} đã nhắc đến bạn</p>
+            <p style={mentionToastStyle.text}>
+              {mentionToast.content?.length > 60
+                ? mentionToast.content.slice(0, 60) + '...'
+                : mentionToast.content}
+            </p>
+          </div>
+          <button style={mentionToastStyle.close} onClick={e => { e.stopPropagation(); setMentionToast(null); }}>✕</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -252,4 +305,31 @@ export default function ChatLayout() {
 const plusMenuStyle = {
   menu: { position: 'absolute', right: 0, top: '100%', marginTop: 6, backgroundColor: 'white', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 6, minWidth: 180, zIndex: 100, border: '1px solid #f3f4f6' },
   item: { display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 14px', border: 'none', backgroundColor: 'transparent', cursor: 'pointer', fontSize: 14, color: '#374151', borderRadius: 7, textAlign: 'left' },
+};
+
+const mentionToastStyle = {
+  wrap: {
+    position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
+    display: 'flex', alignItems: 'center', gap: 10,
+    backgroundColor: 'white',
+    border: '1px solid #e5e7eb',
+    borderLeft: '4px solid #7c3aed',
+    borderRadius: 12,
+    padding: '12px 14px',
+    boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+    cursor: 'pointer',
+    maxWidth: 320,
+    animation: 'slideIn 0.3s ease',
+  },
+  icon: {
+    width: 36, height: 36, borderRadius: '50%',
+    background: 'linear-gradient(135deg,#667eea,#764ba2)',
+    color: 'white', fontWeight: 800, fontSize: 16,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
+  },
+  body: { flex: 1, minWidth: 0 },
+  title: { fontSize: 13, fontWeight: 700, color: '#7c3aed', margin: 0, marginBottom: 2 },
+  text: { fontSize: 12, color: '#374151', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  close: { background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 14, padding: '2px 4px', flexShrink: 0 },
 };

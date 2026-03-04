@@ -18,10 +18,11 @@ import {
   leaveGroup,
   getGroupRequests,
   handleGroupRequest,
+  getConversationPins,
 } from '../../services/groupService';
 import { getCurrentUserId } from '../../utils/chatHelpers';
 
-const GROUP_TABS = ['Thành viên', 'Ảnh/Video', 'File', 'Link'];
+const GROUP_TABS = ['Thành viên', 'Ảnh/Video', 'File', 'Link', 'Pins'];
 const PRIVATE_TABS = ['Thành viên', 'Ảnh/Video', 'File', 'Link'];
 
 export default function GroupInfo({ conversation, onClose, onConversationUpdate, onLeave, reloadRef }) {
@@ -30,6 +31,7 @@ export default function GroupInfo({ conversation, onClose, onConversationUpdate,
   const [media, setMedia] = useState({});
   const [files, setFiles] = useState({});
   const [links, setLinks] = useState({});
+  const [pins, setPins] = useState([]);
   const [requests, setRequests] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -70,6 +72,9 @@ export default function GroupInfo({ conversation, onClose, onConversationUpdate,
   };
   const loadLinks = async () => {
     try { const d = await getConversationLinks(conversation._id); setLinks(d); } catch {}
+  };
+  const loadPins = async () => {
+    try { const d = await getConversationPins(conversation._id); setPins(d); } catch {}
   };
 
   // ── useEffect SAU khi tất cả functions đã được khai báo ─────────────────
@@ -121,6 +126,7 @@ export default function GroupInfo({ conversation, onClose, onConversationUpdate,
     if (activeTab === 1 && Object.keys(media).length === 0) loadMedia();
     if (activeTab === 2 && Object.keys(files).length === 0) loadFiles();
     if (activeTab === 3 && Object.keys(links).length === 0) loadLinks();
+    if (activeTab === 4 && pins.length === 0) loadPins();
   }, [activeTab]);
 
   const showAction = (err, ok) => {
@@ -297,6 +303,9 @@ export default function GroupInfo({ conversation, onClose, onConversationUpdate,
               )}
               {activeTab === 3 && (
                 <LinksTab grouped={links} flattenGrouped={flattenGrouped} expandedYears={expandedYears} toggleYear={toggleYear} />
+              )}
+              {activeTab === 4 && isGroup && (
+                <PinsTab pins={pins} />
               )}
             </div>
           </>
@@ -558,6 +567,54 @@ function LinksTab({ grouped, flattenGrouped, expandedYears, toggleYear }) {
     </div>
   );
 }
+
+// ---- PINS TAB ----
+function PinsTab({ pins }) {
+  const formatTime = (d) => new Date(d).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  if (!pins || pins.length === 0) {
+    return <div style={s.empty}>Chưa có tin nhắn nào được ghim</div>;
+  }
+
+  return (
+    <div style={{ padding: '10px 14px' }}>
+      {pins.map(msg => (
+        <div key={msg._id} style={pinStyle.row}>
+          <div style={pinStyle.avatarWrap}>
+            {msg.senderId?.avatar ? (
+              <img src={msg.senderId.avatar} alt="" style={pinStyle.avatar} />
+            ) : (
+              <div style={pinStyle.avatarFallback}>
+                {(msg.senderId?.name || 'U').charAt(0).toUpperCase()}
+              </div>
+            )}
+          </div>
+          <div style={pinStyle.content}>
+            <div style={pinStyle.meta}>
+              <span style={pinStyle.name}>{msg.senderId?.name || 'Unknown'}</span>
+              <span style={pinStyle.time}>{formatTime(msg.pinnedAt || msg.createdAt)}</span>
+            </div>
+            <p style={pinStyle.text}>
+              {msg.isDeleted ? <em style={{ color: '#9ca3af' }}>Tin nhắn đã bị xóa</em> : msg.content || `[${msg.type}]`}
+            </p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const pinStyle = {
+  row: { display: 'flex', gap: 10, padding: '9px 0', borderBottom: '1px solid #f3f4f6' },
+  avatarWrap: { width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 },
+  avatar: { width: '100%', height: '100%', objectFit: 'cover' },
+  avatarFallback: { width: '100%', height: '100%', background: 'linear-gradient(135deg,#667eea,#764ba2)', color: 'white', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  content: { flex: 1, minWidth: 0 },
+  meta: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 },
+  name: { fontSize: 13, fontWeight: 600, color: '#111827' },
+  time: { fontSize: 11, color: '#9ca3af' },
+  text: { fontSize: 13, color: '#374151', margin: 0, wordBreak: 'break-word', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' },
+};
 
 // ---- STYLES ----
 const s = {

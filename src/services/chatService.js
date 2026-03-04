@@ -165,13 +165,14 @@ export const sendMessage = async (conversationId, content) => {
   }
 };
 
-export const sendMessageWithReply = async (conversationId, content, replyTo = null) => {
+export const sendMessageWithReply = async (conversationId, content, replyTo = null, mentions = null) => {
   try {
     const token = getAccessToken();
     if (!token) throw { message: "No access token found", statusCode: 401 };
 
     const body = { content };
     if (replyTo) body.replyTo = replyTo;
+    if (mentions && mentions.length > 0) body.mentions = mentions;
 
     const response = await fetch(
       `${API_CONFIG.BASE_URL}/messages/${conversationId}`,

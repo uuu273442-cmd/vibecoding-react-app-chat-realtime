@@ -142,6 +142,11 @@ class SocketService {
   onGroupRequestHandled(callback) { this.on('group_request_handled', callback); }
   offGroupRequestHandled(callback){ this.off('group_request_handled', callback); }
 
+  // ── Announcement (Phase 2.2) ────────────────────────────────────────────
+  // conversation room — admin tạo announcement mới
+  onAnnouncementCreated(callback)  { this.on('announcement_created', callback); }
+  offAnnouncementCreated(callback) { this.off('announcement_created', callback); }
+
   // ── Generic ─────────────────────────────────────────────────────────────
 
   on(event, callback) {

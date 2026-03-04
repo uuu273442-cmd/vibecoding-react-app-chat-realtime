@@ -13,6 +13,28 @@ import MediaMessage from './MediaMessage';
 import VoicePlayer from './VoicePlayer';
 import LinkPreview from './LinkPreview';
 
+// Highlight @Name trong text nếu name match với mentions array
+function renderTextWithMentions(text, mentions, isOwn) {
+  if (!mentions || mentions.length === 0) return text;
+  const parts = text.split(/(@\S+)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('@')) {
+      return (
+        <span key={i} style={{
+          backgroundColor: isOwn ? 'rgba(255,255,255,0.25)' : '#ede9fe',
+          color: isOwn ? 'white' : '#7c3aed',
+          borderRadius: 4,
+          padding: '0 3px',
+          fontWeight: 600,
+        }}>
+          {part}
+        </span>
+      );
+    }
+    return part;
+  });
+}
+
 export default function MessageBubble({ 
   message, 
   isOwn, 
@@ -115,7 +137,7 @@ export default function MessageBubble({
           <>
             {message.content && (
               <p style={styles.content}>
-                {message.content}
+                {renderTextWithMentions(message.content, message.mentions || [], isOwn)}
               </p>
             )}
             

@@ -134,3 +134,39 @@ export const handleGroupRequest = async (conversationId, requestId, action) => {
   if (!res.ok) throw data;
   return data;
 };
+
+// ============ ANNOUNCEMENTS ============
+
+// GET /conversations/:id/announcements
+export const getAnnouncements = async (conversationId) => {
+  const res = await fetch(`${base}/conversations/${conversationId}/announcements`, {
+    headers: headers(),
+  });
+  const data = await res.json();
+  if (!res.ok) throw data;
+  return data;
+};
+
+// POST /conversations/:id/announcement
+export const createAnnouncement = async (conversationId, content) => {
+  const res = await fetch(`${base}/conversations/${conversationId}/announcement`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ content }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw data;
+  return data;
+};
+
+// ============ PINNED MESSAGES (trong info panel) ============
+
+// GET /conversations/:id/pins
+export const getConversationPins = async (conversationId) => {
+  const res = await fetch(`${base}/conversations/${conversationId}/pins`, {
+    headers: headers(),
+  });
+  const data = await res.json();
+  if (!res.ok) throw data;
+  return data;
+};
