@@ -1,21 +1,16 @@
 // Đường dẫn: src/components/Chat/MessageBubble.jsx
-// FIXED: Handle missing attachments safely
 
 import React, { useState } from 'react';
-import { User, Check, CheckCheck, CornerDownRight } from 'lucide-react';
-import { messageBubbleStyles as styles } from '../../styles/chatStyles';
+import { User, Check, CheckCheck, CornerDownRight, SmilePlus } from 'lucide-react';
 import { getCurrentUserId } from '../../utils/chatHelpers';
-
-// Message Type Components
 import MessageReactions from './MessageReactions';
 import FileMessage from './FileMessage';
 import MediaMessage from './MediaMessage';
 import VoicePlayer from './VoicePlayer';
 import LinkPreview from './LinkPreview';
 
-// Highlight @Name trong text nếu name match với mentions array
-function renderTextWithMentions(text, mentions, isOwn) {
-  if (!mentions || mentions.length === 0) return text;
+// Highlight @Name trong text
+function renderTextWithMentions(text, isOwn) {
   const parts = text.split(/(@\S+)/g);
   return parts.map((part, i) => {
     if (part.startsWith('@')) {
@@ -35,285 +30,228 @@ function renderTextWithMentions(text, mentions, isOwn) {
   });
 }
 
-export default function MessageBubble({ 
-  message, 
-  isOwn, 
+export default function MessageBubble({
+  message,
+  isOwn,
   showAvatar,
   seenAvatars = [],
   isLastMessage = false,
   onContextMenu,
   onAddReaction,
-  onRemoveReaction
+  onRemoveReaction,
 }) {
   const currentUserId = getCurrentUserId();
   const [isHovered, setIsHovered] = useState(false);
 
-  const formatTime = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('vi-VN', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
-  };
-
-  const isSeen = message.seenBy && message.seenBy.length > 1;
-  const isSeenByOther = isSeen && message.seenBy.some(id => {
-    const userId = typeof id === 'string' ? id : id._id;
-    return userId !== message.senderId._id;
-  });
+  const formatTime = (d) =>
+    new Date(d).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
 
   const isDeleted = message.isDeleted || message.content === 'Message deleted';
 
-  // Render message content based on type
-  const renderMessageContent = () => {
+  const renderContent = () => {
     if (isDeleted) {
       return (
-        <p style={{
-          ...styles.content,
-          fontStyle: 'italic',
-          color: '#9ca3af'
-        }}>
+        <p style={{ fontSize: 14, fontStyle: 'italic', color: isOwn ? 'rgba(255,255,255,0.6)' : '#9ca3af', margin: 0 }}>
           Tin nhắn đã bị xóa
         </p>
       );
     }
-
     switch (message.type) {
       case 'file':
-        // FIX: Check if attachments exist
-        if (!message.attachments || message.attachments.length === 0) {
-          return (
-            <p style={{ fontSize: '13px', color: '#9ca3af', fontStyle: 'italic' }}>
-              File not available
-            </p>
-          );
-        }
-        return (
-          <FileMessage
-            attachments={message.attachments}
-            attachmentCount={message.attachmentCount || message.attachments.length}
-          />
-        );
-        
+        if (!message.attachments?.length) return <p style={ghostText}>File không tìm thấy</p>;
+        return <FileMessage attachments={message.attachments} attachmentCount={message.attachmentCount || message.attachments.length} />;
       case 'media':
-        // FIX: Check if attachments exist
-        if (!message.attachments || message.attachments.length === 0) {
-          return (
-            <p style={{ fontSize: '13px', color: '#9ca3af', fontStyle: 'italic' }}>
-              Media not available
-            </p>
-          );
-        }
-        return (
-          <MediaMessage
-            attachments={message.attachments}
-            attachmentCount={message.attachmentCount || message.attachments.length}
-          />
-        );
-        
+        if (!message.attachments?.length) return <p style={ghostText}>Media không tìm thấy</p>;
+        return <MediaMessage attachments={message.attachments} attachmentCount={message.attachmentCount || message.attachments.length} />;
       case 'voice':
-        // FIX: Check if attachments exist and get first item
-        const voiceAttachment = message.attachments?.[0];
-        
-        if (!voiceAttachment) {
-          console.error('Voice message missing attachment:', message);
-          return (
-            <p style={{ fontSize: '13px', color: '#9ca3af', fontStyle: 'italic' }}>
-              Voice message not available
-            </p>
-          );
-        }
-        
-        return (
-          <VoicePlayer
-            attachment={voiceAttachment}
-            isOwn={isOwn}
-          />
-        );
-        
-      case 'text':
+        const va = message.attachments?.[0];
+        if (!va) return <p style={ghostText}>Voice message không tìm thấy</p>;
+        return <VoicePlayer attachment={va} isOwn={isOwn} />;
       default:
         return (
           <>
             {message.content && (
-              <p style={styles.content}>
-                {renderTextWithMentions(message.content, message.mentions || [], isOwn)}
+              <p style={{ fontSize: 14, margin: 0, lineHeight: '1.5', wordBreak: 'break-word' }}>
+                {renderTextWithMentions(message.content, isOwn)}
               </p>
             )}
-            
-            {/* Link Previews */}
-            {message.linkPreviews && message.linkPreviews.length > 0 && (
-              <LinkPreview links={message.linkPreviews} />
-            )}
+            {message.linkPreviews?.length > 0 && <LinkPreview links={message.linkPreviews} />}
           </>
         );
     }
   };
 
+  const hasReactions = message.reactions?.length > 0;
+  const isMedia = message.type === 'file' || message.type === 'media';
+  const isVoice = message.type === 'voice';
+
   return (
-    <div 
+    <div
       style={{
-        ...styles.container,
-        ...(isOwn ? styles.containerOwn : {})
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: isOwn ? 'flex-end' : 'flex-start',
+        marginBottom: 2,
+        position: 'relative',
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      onContextMenu={(e) => onContextMenu?.(e, message)}
     >
-      {/* Avatar */}
+      {/* Sender name — group only */}
       {!isOwn && showAvatar && (
-        <div style={styles.avatarContainer}>
-          {message.senderId.avatar ? (
-            <img src={message.senderId.avatar} alt="" style={styles.avatar} />
-          ) : (
-            <div style={styles.avatarPlaceholder}>
-              <User size={16} color="#9ca3af" />
-            </div>
-          )}
-        </div>
+        <p style={{ fontSize: 11, color: '#6b7280', margin: '0 0 2px 40px', fontWeight: 500 }}>
+          {message.senderId?.name}
+        </p>
       )}
-      
-      {!isOwn && !showAvatar && <div style={styles.avatarSpacer} />}
 
-      {/* Message Content */}
-      <div style={{
-        ...styles.messageWrapper,
-        ...(isOwn ? styles.messageWrapperOwn : {})
-      }}>
-        {/* Sender Name */}
-        {!isOwn && showAvatar && (
-          <p style={styles.senderName}>{message.senderId.name}</p>
-        )}
-
-        {/* Reply Quote */}
-        {message.replyTo && (
-          <div style={styles.replyQuote}>
-            <div style={styles.quoteBar} />
-            <div style={styles.quoteContent}>
-              <CornerDownRight size={12} style={styles.quoteIcon} />
-              <div>
-                <p style={styles.quoteAuthor}>
-                  {message.replyTo.senderId?.name || 'Unknown'}
-                </p>
-                <p style={styles.quoteText}>
-                  {message.replyTo.content?.slice(0, 50)}
-                  {message.replyTo.content?.length > 50 ? '...' : ''}
-                </p>
-              </div>
-            </div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, flexDirection: isOwn ? 'row-reverse' : 'row' }}>
+        {/* Avatar */}
+        {!isOwn && (
+          <div style={{ width: 28, height: 28, flexShrink: 0, alignSelf: 'flex-end' }}>
+            {showAvatar ? (
+              message.senderId?.avatar
+                ? <img src={message.senderId.avatar} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
+                : <div style={avatarFallback}><User size={14} color="#9ca3af" /></div>
+            ) : null}
           </div>
         )}
 
-        {/* Message Bubble */}
-        <div style={{
-          ...styles.bubble,
-          ...(isOwn ? styles.bubbleOwn : styles.bubbleOther),
-          ...(message.type === 'voice' ? { backgroundColor: 'transparent', padding: 0 } : {}),
-          ...(message.type === 'file' || message.type === 'media' ? { backgroundColor: 'transparent', padding: '8px' } : {})
-        }}>
-          {/* Forwarded Badge */}
-          {message.type === 'forward' && (
-            <div style={styles.forwardedBadge}>
-              <CornerDownRight size={12} />
-              <span>Forwarded</span>
-            </div>
-          )}
+        {/* Message + hover action row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexDirection: isOwn ? 'row-reverse' : 'row', maxWidth: '65vw' }}>
 
-          {/* Content */}
-          {renderMessageContent()}
-        </div>
-
-        {/* Reactions — chỉ hiện khi hover hoặc đã có reactions */}
-        {!isDeleted && (isHovered || (message.reactions && message.reactions.length > 0)) && (
-          <MessageReactions
-            message={message}
-            onAddReaction={onAddReaction}
-            onRemoveReaction={onRemoveReaction}
-          />
-        )}
-
-        {/* Time & Status */}
-        <div style={{
-          ...styles.footer,
-          ...(isOwn ? styles.footerOwn : {})
-        }}>
-          <span style={styles.time}>
-            {formatTime(message.createdAt)}
-            {message.isEdited && (
-              <span style={styles.editedBadge}> (edited)</span>
+          {/* Bubble */}
+          <div
+            style={{ position: 'relative' }}
+            onContextMenu={(e) => onContextMenu?.(e, message)}
+          >
+            {/* Forward badge */}
+            {message.type === 'forward' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#9ca3af', marginBottom: 3, paddingLeft: isOwn ? 0 : 12 }}>
+                <CornerDownRight size={11} /> Forwarded
+              </div>
             )}
-          </span>
-          {isOwn && !isDeleted && (
-            <span style={styles.seenIndicator}>
-              {seenAvatars.length > 0 ? (
-                <CheckCheck size={14} color="#10b981" />
-              ) : (
-                <Check size={14} color="#9ca3af" />
-              )}
-            </span>
-          )}
-        </div>
 
-        {/* Seen avatars — chỉ hiện ở tin nhắn cuối cùng của mình */}
-        {isOwn && isLastMessage && seenAvatars.length > 0 && (
-          <div style={seenRowStyle.row}>
-            {seenAvatars.slice(0, 5).map((user, i) => {
-              const id = typeof user === 'string' ? user : user._id;
-              const name = typeof user === 'object' ? (user.name || '') : '';
-              const avatar = typeof user === 'object' ? user.avatar : null;
-              return (
-                <div key={id || i} title={name} style={seenRowStyle.wrap}>
-                  {avatar ? (
-                    <img src={avatar} alt={name} style={seenRowStyle.img} />
-                  ) : (
-                    <div style={seenRowStyle.fallback}>
-                      {name.charAt(0).toUpperCase() || '?'}
-                    </div>
-                  )}
+            {/* Reply quote */}
+            {message.replyTo && (
+              <div style={{
+                ...(isOwn ? replyOwn : replyOther),
+                marginBottom: 4,
+              }}>
+                <div style={{ width: 3, backgroundColor: isOwn ? 'rgba(255,255,255,0.6)' : '#764ba2', borderRadius: 2, flexShrink: 0 }} />
+                <div style={{ paddingLeft: 8, overflow: 'hidden' }}>
+                  <p style={{ fontSize: 11, fontWeight: 600, color: isOwn ? 'rgba(255,255,255,0.8)' : '#764ba2', margin: '0 0 1px' }}>
+                    {message.replyTo.senderId?.name || 'Unknown'}
+                  </p>
+                  <p style={{ fontSize: 12, color: isOwn ? 'rgba(255,255,255,0.65)' : '#6b7280', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {message.replyTo.content?.slice(0, 60)}{message.replyTo.content?.length > 60 ? '...' : ''}
+                  </p>
                 </div>
-              );
-            })}
-            {seenAvatars.length > 5 && (
-              <div style={{ ...seenRowStyle.fallback, fontSize: 8 }}>
-                +{seenAvatars.length - 5}
+              </div>
+            )}
+
+            {/* Main bubble */}
+            <div style={{
+              padding: isMedia || isVoice ? '6px' : '9px 13px',
+              borderRadius: isOwn ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+              ...(isOwn
+                ? { background: 'linear-gradient(135deg,#667eea 0%,#764ba2 100%)', color: 'white' }
+                : { backgroundColor: 'white', color: '#1f2937', boxShadow: '0 1px 2px rgba(0,0,0,0.08)' }),
+              ...(isDeleted ? { backgroundColor: '#f3f4f6', background: 'none', color: '#9ca3af' } : {}),
+            }}>
+              {renderContent()}
+            </div>
+
+            {/* Reactions — absolute, below bubble */}
+            {hasReactions && (
+              <div style={{
+                position: 'absolute',
+                bottom: -14,
+                ...(isOwn ? { right: 4 } : { left: 4 }),
+                zIndex: 2,
+              }}>
+                <MessageReactions message={message} onAddReaction={onAddReaction} onRemoveReaction={onRemoveReaction} compact />
               </div>
             )}
           </div>
+
+          {/* Hover actions — absolute positioned, no layout shift */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            opacity: isHovered ? 1 : 0,
+            transition: 'opacity 0.15s',
+            pointerEvents: isHovered ? 'auto' : 'none',
+          }}>
+            {/* Emoji quick react */}
+            {!isDeleted && (
+              <button
+                onClick={() => onAddReaction?.(message._id, '❤️')}
+                style={actionBtn}
+                title="React"
+                onContextMenu={(e) => { e.preventDefault(); onContextMenu?.(e, message); }}
+              >
+                <SmilePlus size={16} color="#6b7280" />
+              </button>
+            )}
+            {/* More options → context menu */}
+            {!isDeleted && (
+              <button
+                style={actionBtn}
+                title="More"
+                onClick={(e) => onContextMenu?.(e, message)}
+              >
+                <span style={{ fontSize: 16, color: '#6b7280', lineHeight: 1 }}>···</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Time + seen status */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 4,
+        marginTop: hasReactions ? 18 : 3,
+        paddingLeft: isOwn ? 0 : 40,
+        justifyContent: isOwn ? 'flex-end' : 'flex-start',
+      }}>
+        <span style={{ fontSize: 11, color: '#9ca3af' }}>
+          {formatTime(message.createdAt)}
+          {message.isEdited && <span style={{ fontStyle: 'italic', marginLeft: 3 }}>(đã sửa)</span>}
+        </span>
+        {isOwn && !isDeleted && (
+          seenAvatars.length > 0
+            ? <CheckCheck size={13} color="#667eea" />
+            : <Check size={13} color="#9ca3af" />
         )}
       </div>
+
+      {/* Seen avatars — chỉ ở message của mình mà được người khác seen */}
+      {isOwn && seenAvatars.length > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 2, marginTop: 1 }}>
+          {seenAvatars.slice(0, 5).map((u, i) => {
+            const name = typeof u === 'object' ? (u.name || '') : '';
+            const av = typeof u === 'object' ? u.avatar : null;
+            const key = (typeof u === 'object' ? u._id : u) || name || i;
+            return (
+              <div key={key} title={name} style={{ width: 14, height: 14, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
+                {av
+                  ? <img src={av} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : <div style={{ ...seenFallback, fontSize: 7 }}>{name?.charAt(0)?.toUpperCase() || '?'}</div>
+                }
+              </div>
+            );
+          })}
+          {seenAvatars.length > 5 && <div style={{ ...seenFallback, fontSize: 7, width: 14, height: 14 }}>+{seenAvatars.length - 5}</div>}
+        </div>
+      )}
     </div>
   );
 }
 
-const seenRowStyle = {
-  row: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    gap: 2,
-    paddingRight: 2,
-    marginTop: 1,
-  },
-  wrap: {
-    width: 14, height: 14,
-    borderRadius: '50%',
-    overflow: 'hidden',
-    flexShrink: 0,
-  },
-  img: {
-    width: '100%', height: '100%',
-    objectFit: 'cover',
-  },
-  fallback: {
-    width: 14, height: 14,
-    borderRadius: '50%',
-    background: 'linear-gradient(135deg,#667eea,#764ba2)',
-    color: 'white',
-    fontSize: 7,
-    fontWeight: 700,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-};
+const ghostText = { fontSize: 13, color: '#9ca3af', fontStyle: 'italic', margin: 0 };
+const avatarFallback = { width: 28, height: 28, borderRadius: '50%', backgroundColor: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center' };
+const seenFallback = { width: 14, height: 14, borderRadius: '50%', background: 'linear-gradient(135deg,#667eea,#764ba2)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' };
+const actionBtn = { width: 28, height: 28, borderRadius: '50%', border: 'none', background: 'white', boxShadow: '0 1px 4px rgba(0,0,0,0.12)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 };
+const replyOwn = { display: 'flex', gap: 6, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 8, padding: '5px 8px', maxWidth: 260 };
+const replyOther = { display: 'flex', gap: 6, backgroundColor: '#f3f4f6', borderRadius: 8, padding: '5px 8px', maxWidth: 260 };

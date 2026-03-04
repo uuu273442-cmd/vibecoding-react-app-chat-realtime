@@ -601,409 +601,115 @@ export const chatWindowStyles = {
     display: "flex",
     flexDirection: "column",
     height: "100%",
-    backgroundColor: "#f9fafb",
+    backgroundColor: "#f0f2f5",
   },
-
-  // Header
   header: {
-    padding: "16px 20px",
+    padding: "10px 16px",
     backgroundColor: "white",
     borderBottom: "1px solid #e5e7eb",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-  },
-
-  headerLeft: {
-    display: "flex",
-    alignItems: "center",
-    gap: "12px",
-  },
-
-  avatarContainer: {
-    position: "relative",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
     flexShrink: 0,
+    minHeight: 60,
   },
-
-  avatar: {
-    width: "40px",
-    height: "40px",
-    borderRadius: "50%",
-    objectFit: "cover",
-  },
-
+  headerLeft: { display: "flex", alignItems: "center", gap: "10px" },
+  avatarContainer: { position: "relative", flexShrink: 0 },
+  avatar: { width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover" },
   avatarPlaceholder: {
-    width: "40px",
-    height: "40px",
-    borderRadius: "50%",
+    width: "40px", height: "40px", borderRadius: "50%",
     backgroundColor: "#f3f4f6",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
+    display: "flex", alignItems: "center", justifyContent: "center",
   },
-
   onlineIndicator: {
-    position: "absolute",
-    bottom: "0",
-    right: "0",
-    width: "10px",
-    height: "10px",
-    backgroundColor: "#10b981",
-    border: "2px solid white",
-    borderRadius: "50%",
+    position: "absolute", bottom: 1, right: 1,
+    width: "10px", height: "10px",
+    backgroundColor: "#22c55e", border: "2px solid white", borderRadius: "50%",
   },
-
-  userInfo: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "2px",
-  },
-
-  statusContainer: {
-    display: "flex",
-    alignItems: "center",
-    gap: "4px",
-  },
-
-  userName: {
-    fontSize: "16px",
-    fontWeight: "600",
-    color: "#1f2937",
-    margin: 0,
-  },
-
-  userStatus: {
-    fontSize: "12px",
-    margin: 0,
-  },
-
-  typingStatus: {
-    fontSize: "12px",
-    color: "#764ba2",
-    margin: 0,
-    fontStyle: "italic",
-  },
-
+  userInfo: { display: "flex", flexDirection: "column", gap: 1 },
+  statusContainer: { display: "flex", alignItems: "center", gap: 4 },
+  userName: { fontSize: "15px", fontWeight: "600", color: "#111827", margin: 0 },
+  userStatus: { fontSize: "12px", margin: 0 },
+  typingStatus: { fontSize: "12px", color: "#764ba2", margin: 0, fontStyle: "italic" },
   moreButton: {
-    background: "none",
-    border: "none",
-    color: "#6b7280",
-    cursor: "pointer",
-    padding: "8px",
-    borderRadius: "8px",
-    display: "flex",
-    alignItems: "center",
-    transition: "all 0.2s",
+    background: "none", border: "none", color: "#6b7280",
+    cursor: "pointer", padding: "8px", borderRadius: "50%",
+    display: "flex", alignItems: "center",
+    transition: "background 0.15s",
   },
-
-  // Messages Area
   messagesContainer: {
-    flex: 1,
-    overflowY: "auto",
-    padding: "20px",
-    display: "flex",
-    flexDirection: "column",
-    gap: "2px",
+    flex: 1, overflowY: "auto", padding: "12px 16px",
+    display: "flex", flexDirection: "column", gap: 0,
+    backgroundColor: "#f0f2f5",
   },
-
   loadingContainer: {
-    flex: 1,
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "12px",
+    flex: 1, display: "flex", flexDirection: "column",
+    alignItems: "center", justifyContent: "center", gap: 12,
   },
-
-  spinner: {
-    fontSize: "32px",
-    animation: "spin 1s linear infinite",
-  },
-
-  loadingText: {
-    color: "#6b7280",
-    fontSize: "14px",
-    margin: 0,
-  },
-
-  errorContainer: {
-    flex: 1,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "40px",
-  },
-
-  errorText: {
-    color: "#dc2626",
-    fontSize: "14px",
-    textAlign: "center",
-  },
-
+  spinner: { fontSize: "28px", animation: "spin 1s linear infinite" },
+  loadingText: { color: "#6b7280", fontSize: "14px", margin: 0 },
+  errorContainer: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 40 },
+  errorText: { color: "#dc2626", fontSize: "14px", textAlign: "center" },
   emptyContainer: {
-    flex: 1,
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "8px",
+    flex: 1, display: "flex", flexDirection: "column",
+    alignItems: "center", justifyContent: "center", gap: 8,
   },
-
-  emptyText: {
-    color: "#6b7280",
-    fontSize: "16px",
-    fontWeight: "500",
-    margin: 0,
+  emptyText: { color: "#6b7280", fontSize: "16px", fontWeight: "500", margin: 0 },
+  emptySubtext: { color: "#9ca3af", fontSize: "14px", margin: 0 },
+  loadMoreIndicator: {
+    display: "flex", alignItems: "center", justifyContent: "center",
+    gap: 8, padding: "8px 0",
   },
-
-  emptySubtext: {
-    color: "#9ca3af",
-    fontSize: "14px",
-    margin: 0,
+  noMoreMessages: {
+    display: "flex", alignItems: "center", justifyContent: "center",
+    padding: "8px 0", fontSize: 12, color: "#9ca3af",
   },
-
-  // Input Area
   inputContainer: {
-    padding: "16px 20px",
+    padding: "10px 12px",
     backgroundColor: "white",
     borderTop: "1px solid #e5e7eb",
     display: "flex",
-    gap: "12px",
+    gap: 8,
     alignItems: "center",
-  },
-
-  input: {
-    flex: 1,
-    padding: "12px 16px",
-    border: "1px solid #e5e7eb",
-    borderRadius: "24px",
-    fontSize: "14px",
-    outline: "none",
-    transition: "all 0.2s",
-    fontFamily: "inherit",
-  },
-
-  sendButton: {
-    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-    color: "white",
-    border: "none",
-    width: "44px",
-    height: "44px",
-    borderRadius: "50%",
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    transition: "all 0.2s",
     flexShrink: 0,
   },
-
-  sendButtonDisabled: {
-    opacity: 0.5,
-    cursor: "not-allowed",
+  input: {
+    flex: 1, padding: "10px 16px",
+    border: "none",
+    borderRadius: "22px",
+    fontSize: "14px",
+    outline: "none",
+    fontFamily: "inherit",
+    backgroundColor: "#f0f2f5",
+    color: "#1f2937",
   },
-
-  // Typing Indicator (in chat area)
+  sendButton: {
+    background: "linear-gradient(135deg,#667eea 0%,#764ba2 100%)",
+    color: "white", border: "none",
+    width: "40px", height: "40px", borderRadius: "50%",
+    cursor: "pointer",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    transition: "opacity 0.2s", flexShrink: 0,
+  },
+  sendButtonDisabled: { opacity: 0.45, cursor: "not-allowed" },
   typingIndicatorContainer: {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-    padding: "8px 0",
-    marginLeft: "36px", // Align with other messages
+    display: "flex", alignItems: "center", gap: 8,
+    padding: "4px 0", marginLeft: 34,
   },
-
   typingBubble: {
-    backgroundColor: "#f3f4f6",
-    borderRadius: "16px",
+    backgroundColor: "white", borderRadius: "18px",
     padding: "10px 14px",
-    display: "flex",
-    gap: "4px",
-    alignItems: "center",
+    display: "flex", gap: 4, alignItems: "center",
+    boxShadow: "0 1px 2px rgba(0,0,0,0.08)",
   },
-
   typingDot: {
-    width: "6px",
-    height: "6px",
-    backgroundColor: "#9ca3af",
-    borderRadius: "50%",
+    width: "6px", height: "6px",
+    backgroundColor: "#9ca3af", borderRadius: "50%",
     animation: "typing 1.4s infinite",
   },
-
-  typingText: {
-    fontSize: "12px",
-    color: "#6b7280",
-    margin: 0,
-    fontStyle: "italic",
-  },
+  typingText: { fontSize: "12px", color: "#6b7280", margin: 0, fontStyle: "italic" },
 };
 
 // MessageBubble Styles
-export const messageBubbleStyles = {
-  container: {
-    display: "flex",
-    gap: "8px",
-    marginBottom: "2px",
-  },
-
-  containerOwn: {
-    justifyContent: "flex-end",
-  },
-
-  avatarContainer: {
-    flexShrink: 0,
-  },
-
-  avatar: {
-    width: "28px",
-    height: "28px",
-    borderRadius: "50%",
-    objectFit: "cover",
-  },
-
-  avatarPlaceholder: {
-    width: "28px",
-    height: "28px",
-    borderRadius: "50%",
-    backgroundColor: "#f3f4f6",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  avatarSpacer: {
-    width: "28px",
-    flexShrink: 0,
-    visibility: "hidden",
-  },
-
-  messageWrapper: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "2px",
-    maxWidth: "65%",
-  },
-
-  messageWrapperOwn: {
-    alignItems: "flex-end",
-  },
-
-  senderName: {
-    fontSize: "12px",
-    color: "#6b7280",
-    margin: 0,
-    paddingLeft: "12px",
-    fontWeight: "500",
-  },
-
-  bubble: {
-    padding: "10px 14px",
-    borderRadius: "16px",
-    wordWrap: "break-word",
-  },
-
-  bubbleOwn: {
-    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-    color: "white",
-    borderBottomRightRadius: "4px",
-  },
-
-  bubbleOther: {
-    backgroundColor: "white",
-    color: "#1f2937",
-    borderBottomLeftRadius: "4px",
-  },
-
-  content: {
-    fontSize: "14px",
-    margin: 0,
-    lineHeight: "1.5",
-  },
-
-  footer: {
-    display: "flex",
-    alignItems: "center",
-    gap: "4px",
-    paddingLeft: "12px",
-  },
-
-  footerOwn: {
-    justifyContent: "flex-end",
-    paddingLeft: 0,
-    paddingRight: "12px",
-  },
-
-  time: {
-    fontSize: "11px",
-    color: "#9ca3af",
-  },
-
-  seenIndicator: {
-    display: "flex",
-    alignItems: "center",
-  },
-
-  // NEW STYLES:
-  replyQuote: {
-    backgroundColor: "rgba(0,0,0,0.05)",
-    borderRadius: "8px",
-    padding: "8px",
-    marginBottom: "6px",
-  },
-
-  quoteBar: {
-    width: "3px",
-    backgroundColor: "#764ba2",
-    borderRadius: "2px",
-  },
-
-  quoteContent: {
-    display: "flex",
-    gap: "6px",
-    paddingLeft: "8px",
-  },
-
-  quoteIcon: {
-    color: "#764ba2",
-    flexShrink: 0,
-    marginTop: "2px",
-  },
-
-  quoteAuthor: {
-    fontSize: "12px",
-    fontWeight: "600",
-    color: "#764ba2",
-    margin: 0,
-    marginBottom: "2px",
-  },
-
-  quoteText: {
-    fontSize: "13px",
-    color: "#6b7280",
-    margin: 0,
-  },
-
-  bubbleDeleted: {
-    backgroundColor: "#f3f4f6",
-    borderColor: "#d1d5db",
-  },
-
-  contentDeleted: {
-    color: "#9ca3af",
-    fontStyle: "italic",
-  },
-
-  editedBadge: {
-    fontSize: "11px",
-    color: "#9ca3af",
-    fontStyle: "italic",
-  },
-
-  forwardedBadge: {
-    display: "flex",
-    alignItems: "center",
-    gap: "4px",
-    fontSize: "11px",
-    color: "#9ca3af",
-    marginBottom: "4px",
-  },
-};
+export const messageBubbleStyles = {};

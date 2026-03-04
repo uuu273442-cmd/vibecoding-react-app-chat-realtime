@@ -38,9 +38,14 @@ export const loginUser = async (credentials) => {
       throw data;
     }
 
-    // Lưu cả accessToken và refreshToken
+    // Lưu tokens
     localStorage.setItem('accessToken', data.accessToken);
     localStorage.setItem('refreshToken', data.refreshToken);
+
+    // Lưu thông tin user để tránh decode JWT nhiều lần
+    if (data.user) {
+      localStorage.setItem('currentUser', JSON.stringify(data.user));
+    }
 
     return data;
   } catch (error) {
@@ -98,6 +103,7 @@ export const logoutUser = async () => {
     // Clear tokens regardless of response
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('currentUser');
 
     if (!response.ok) {
       const data = await response.json();
@@ -110,6 +116,7 @@ export const logoutUser = async () => {
     // Still remove tokens even if API call fails
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('currentUser');
     throw error;
   }
 };
@@ -122,6 +129,22 @@ export const isAuthenticated = () => {
 // Get access token
 export const getAccessToken = () => {
   return localStorage.getItem('accessToken');
+};
+
+// Get current user info (saved at login) — never stale
+export const getCurrentUser = () => {
+  try {
+    const raw = localStorage.getItem('currentUser');
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  // Fallback: decode JWT
+  const token = localStorage.getItem('accessToken');
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return { _id: payload.sub || payload.id, ...payload };
+  } catch {}
+  return null;
 };
 
 // Get refresh token

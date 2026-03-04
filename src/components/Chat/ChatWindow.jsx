@@ -160,18 +160,30 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
 
     const handleMessageSeen = ({ conversationId, messageId, seenBy }) => {
       if (conversationId !== conversation._id) return;
-      if (!seenBy || seenBy._id === currentUserId) return;
+      if (!seenBy) return;
+
+      // BE gửi seenBy: { _id?, name, avatar }
+      // Nếu _id trùng với currentUserId → bỏ qua (mình tự seen)
+      const seenById = seenBy._id;
+      if (seenById && seenById === currentUserId) return;
+
       setMessages(prev => prev.map(msg => {
-        // Xóa seenBy user này khỏi message cũ (avatar di chuyển)
-        const filtered = (msg.seenBy || []).filter(sb => {
-          const id = typeof sb === 'string' ? sb : sb._id;
-          return id !== seenBy._id;
+        // Xóa entry cũ của user này khỏi tất cả messages
+        // Match bằng _id nếu có, fallback bằng name
+        const withoutUser = (msg.seenBy || []).filter(sb => {
+          if (seenById) {
+            const sbId = typeof sb === 'string' ? sb : sb._id;
+            return sbId !== seenById;
+          }
+          // fallback: match by name
+          const sbName = typeof sb === 'object' ? sb.name : null;
+          return sbName !== seenBy.name;
         });
+
         if (msg._id === messageId) {
-          // Thêm vào message mới nhất user đã đọc
-          return { ...msg, seenBy: [...filtered, seenBy] };
+          return { ...msg, seenBy: [...withoutUser, seenBy] };
         }
-        return { ...msg, seenBy: filtered };
+        return { ...msg, seenBy: withoutUser };
       }));
     };
 
@@ -675,25 +687,17 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
                           const curId = typeof message.senderId === 'string' ? message.senderId : message.senderId?._id;
                           return prevId !== curId;
                         })()}
-                        isLastMessage={(() => {
-                          // Tin nhắn cuối cùng của chính mình trong toàn bộ list
-                          const msgId = typeof message.senderId === 'string' ? message.senderId : message.senderId?._id;
-                          if (msgId !== currentUserId) return false;
-                          // Tìm index của own message cuối cùng
-                          for (let i = visibleMessages.length - 1; i >= 0; i--) {
-                            const m = visibleMessages[i];
-                            if (m.type === 'system') continue;
-                            const mId = typeof m.senderId === 'string' ? m.senderId : m.senderId?._id;
-                            if (mId === currentUserId) return m._id === message._id;
-                          }
-                          return false;
-                        })()}
+                        isLastMessage={false}
                         seenAvatars={(() => {
-                          const isOwn = (typeof message.senderId === 'string' ? message.senderId : message.senderId?._id) === currentUserId;
-                          if (!isOwn) return [];
+                          const msgSenderId = typeof message.senderId === 'string' ? message.senderId : message.senderId?._id;
+                          if (msgSenderId !== currentUserId) return [];
+                          // seenBy entries từ initial load có _id, từ socket có thể không có _id
                           return (message.seenBy || []).filter(sb => {
-                            const id = typeof sb === 'string' ? sb : sb._id;
-                            return id !== currentUserId;
+                            const id = typeof sb === 'string' ? sb : sb?._id;
+                            // Nếu có _id → filter chính mình
+                            if (id) return id !== currentUserId;
+                            // Không có _id (từ socket) → luôn hiện (là người khác)
+                            return true;
                           });
                         })()}
                         onContextMenu={handleContextMenu}

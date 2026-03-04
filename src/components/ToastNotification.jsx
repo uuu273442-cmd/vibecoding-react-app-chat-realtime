@@ -1,13 +1,13 @@
 // Đường dẫn: src/components/ToastNotification.jsx
-// UPDATED: Phase 2 - group events notifications
+// Global toast — mount một lần ở MainLayout, lắng nghe tất cả socket events
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { UserPlus, UserCheck, UserX, Users, LogOut, Shield, Bell, X } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { UserPlus, UserCheck, UserX, Users, LogOut, Shield, Bell, X, AtSign } from 'lucide-react';
 import socketService from '../services/socketService';
 import { getCurrentUserId } from '../utils/chatHelpers';
 
-// ── Toast hook ────────────────────────────────────────────────────────────────
-export const useToast = () => {
+// ── Hook ─────────────────────────────────────────────────────────────────────
+function useToast() {
   const [toasts, setToasts] = useState([]);
 
   const addToast = useCallback((toast) => {
@@ -23,77 +23,63 @@ export const useToast = () => {
   }, []);
 
   return { toasts, addToast, removeToast };
-};
+}
 
-// ── Icon map ──────────────────────────────────────────────────────────────────
-const ICONS = {
-  friend_request:   <UserPlus  size={18} />,
-  friend_accepted:  <UserCheck size={18} />,
-  friend_rejected:  <UserX    size={18} />,
-  group_created:    <Users    size={18} />,
-  group_added:      <UserPlus  size={18} />,
-  group_removed:    <UserX    size={18} />,
-  group_left:       <LogOut   size={18} />,
-  group_role:       <Shield   size={18} />,
-  group_request:    <Bell     size={18} />,
-  default:          <Bell     size={18} />,
-};
-
-const COLORS = {
-  friend_request:   { bg: '#eff6ff', border: '#bfdbfe', icon: '#3b82f6', text: '#1e40af' },
-  friend_accepted:  { bg: '#f0fdf4', border: '#bbf7d0', icon: '#16a34a', text: '#166534' },
-  friend_rejected:  { bg: '#fef2f2', border: '#fecaca', icon: '#dc2626', text: '#991b1b' },
-  group_created:    { bg: '#faf5ff', border: '#e9d5ff', icon: '#7c3aed', text: '#5b21b6' },
-  group_added:      { bg: '#f0fdf4', border: '#bbf7d0', icon: '#16a34a', text: '#166534' },
-  group_removed:    { bg: '#fef2f2', border: '#fecaca', icon: '#dc2626', text: '#991b1b' },
-  group_left:       { bg: '#fff7ed', border: '#fed7aa', icon: '#ea580c', text: '#9a3412' },
-  group_role:       { bg: '#eff6ff', border: '#bfdbfe', icon: '#3b82f6', text: '#1e40af' },
-  group_request:    { bg: '#fffbeb', border: '#fde68a', icon: '#d97706', text: '#92400e' },
-  default:          { bg: '#f9fafb', border: '#e5e7eb', icon: '#6b7280', text: '#374151' },
+// ── Config ────────────────────────────────────────────────────────────────────
+const CONFIG = {
+  friend_request:  { icon: UserPlus,  bg: '#eff6ff', border: '#3b82f6', text: '#1e40af' },
+  friend_accepted: { icon: UserCheck, bg: '#f0fdf4', border: '#16a34a', text: '#166534' },
+  friend_rejected: { icon: UserX,     bg: '#fef2f2', border: '#dc2626', text: '#991b1b' },
+  group_created:   { icon: Users,     bg: '#faf5ff', border: '#7c3aed', text: '#5b21b6' },
+  group_added:     { icon: UserPlus,  bg: '#f0fdf4', border: '#16a34a', text: '#166534' },
+  group_removed:   { icon: UserX,     bg: '#fef2f2', border: '#dc2626', text: '#991b1b' },
+  group_role:      { icon: Shield,    bg: '#eff6ff', border: '#3b82f6', text: '#1e40af' },
+  group_request:   { icon: Bell,      bg: '#fffbeb', border: '#d97706', text: '#92400e' },
+  mention:         { icon: AtSign,    bg: '#faf5ff', border: '#7c3aed', text: '#5b21b6' },
+  default:         { icon: Bell,      bg: '#f9fafb', border: '#6b7280', text: '#374151' },
 };
 
 // ── Single Toast ──────────────────────────────────────────────────────────────
 function Toast({ toast, onRemove, onNavigate }) {
-  const color = COLORS[toast.type] || COLORS.default;
-  const icon = ICONS[toast.type] || ICONS.default;
+  const cfg = CONFIG[toast.type] || CONFIG.default;
+  const Icon = cfg.icon;
 
   return (
     <div
-      onClick={() => { toast.onClick?.(); onNavigate?.(); onRemove(toast.id); }}
+      onClick={() => { toast.onAction?.(); onNavigate?.(toast.path); onRemove(toast.id); }}
       style={{
-        display: 'flex', alignItems: 'flex-start', gap: 12,
+        display: 'flex', alignItems: 'flex-start', gap: 10,
         padding: '12px 14px',
-        backgroundColor: color.bg,
-        border: `1px solid ${color.border}`,
-        borderRadius: 12,
-        boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
-        cursor: toast.onClick ? 'pointer' : 'default',
+        backgroundColor: cfg.bg,
+        borderLeft: `4px solid ${cfg.border}`,
+        borderRadius: 10,
+        boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
+        cursor: toast.path ? 'pointer' : 'default',
         minWidth: 280, maxWidth: 340,
-        animation: 'slideIn 0.25s ease',
-        position: 'relative',
+        animation: 'toastIn 0.25s ease',
       }}
     >
       <div style={{
-        width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-        backgroundColor: color.border,
-        color: color.icon,
+        width: 34, height: 34, borderRadius: 8, flexShrink: 0,
+        backgroundColor: cfg.border + '22',
+        color: cfg.border,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        {icon}
+        <Icon size={17} />
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 0, paddingTop: 1 }}>
         {toast.title && (
-          <p style={{ fontSize: 13, fontWeight: 700, color: color.text, margin: '0 0 2px' }}>
+          <p style={{ fontSize: 13, fontWeight: 700, color: cfg.text, margin: '0 0 2px' }}>
             {toast.title}
           </p>
         )}
-        <p style={{ fontSize: 13, color: color.text, margin: 0, opacity: 0.85 }}>
+        <p style={{ fontSize: 13, color: cfg.text, margin: 0, opacity: 0.85, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {toast.message}
         </p>
       </div>
       <button
         onClick={e => { e.stopPropagation(); onRemove(toast.id); }}
-        style={{ background: 'none', border: 'none', cursor: 'pointer', color: color.icon, padding: 2, display: 'flex', flexShrink: 0 }}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', color: cfg.text, padding: 2, opacity: 0.5, display: 'flex', flexShrink: 0 }}
       >
         <X size={14} />
       </button>
@@ -101,155 +87,185 @@ function Toast({ toast, onRemove, onNavigate }) {
   );
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
+// ── Main ──────────────────────────────────────────────────────────────────────
 export default function ToastNotification({ onNavigate }) {
   const { toasts, addToast, removeToast } = useToast();
   const currentUserId = getCurrentUserId();
 
   useEffect(() => {
-    // ── Friend events ──────────────────────────────────────────────────────
-    const handleFriendRequest = (data) => {
+    if (!currentUserId) return; // Chưa đăng nhập
+
+    // ── Friend events (user room) ─────────────────────────────────────────
+    // payload: { request: { _id, from: "userId_string", to: {_id,name,avatar}, message, status } }
+    // QUAN TRỌNG: request.from là string ID, không có name
+    // Người nhận event này = req.to → người gửi request = from (chỉ có ID)
+    // BE cần populate from hoặc FE dùng "Ai đó" làm fallback
+    const onFriendRequest = (data) => {
       if (!data?.request) return;
+      const { request } = data;
+      // request.from là string ID → không có name
+      // Nếu BE populate thành object thì dùng from.name, fallback "Người dùng mới"
+      const senderName = typeof request.from === 'object'
+        ? (request.from.name || 'Ai đó')
+        : 'Ai đó'; // BE chưa populate from
       addToast({
         type: 'friend_request',
         title: 'Lời mời kết bạn',
-        message: `${data.request.from?.name || 'Ai đó'} đã gửi lời mời kết bạn`,
-        onClick: () => onNavigate?.('/friends'),
+        message: `${senderName} đã gửi lời mời kết bạn`,
+        path: '/friends',
       });
     };
 
-    const handleFriendAccepted = (data) => {
+    // payload: { friend: { _id, name, avatar }, conversationId }
+    const onFriendAccepted = (data) => {
       if (!data?.friend) return;
       addToast({
         type: 'friend_accepted',
         title: 'Kết bạn thành công',
-        message: `${data.friend.name} đã chấp nhận lời mời kết bạn`,
-        onClick: () => data.conversationId
-          ? onNavigate?.('/chat', { conversationId: data.conversationId })
-          : onNavigate?.('/friends'),
+        message: `${data.friend.name || 'Ai đó'} đã chấp nhận lời mời kết bạn`,
+        path: '/chat',
       });
     };
 
-    const handleFriendRejected = (data) => {
+    // payload: { rejectedBy: { _id, name } } (nếu BE có emit)
+    const onFriendRejected = (data) => {
       addToast({
         type: 'friend_rejected',
         title: 'Lời mời bị từ chối',
-        message: `${data.rejectedBy?.name || 'Ai đó'} đã từ chối lời mời kết bạn`,
+        message: `${data?.rejectedBy?.name || 'Ai đó'} đã từ chối lời mời kết bạn`,
       });
     };
 
-    // ── Group events ───────────────────────────────────────────────────────
-    const handleGroupCreated = (data) => {
-      const { conversation, createdBy } = data;
-      if (!conversation) return;
+    // ── Group events (user room) ──────────────────────────────────────────
+    // payload: { conversation, createdBy: { _id, name } }
+    const onGroupCreated = (data) => {
+      if (!data?.conversation) return;
       addToast({
         type: 'group_created',
         title: 'Nhóm mới',
-        message: `${createdBy?.name || 'Ai đó'} đã thêm bạn vào nhóm "${conversation.name}"`,
-        onClick: () => onNavigate?.('/chat', conversation),
+        message: `${data.createdBy?.name || 'Ai đó'} đã tạo nhóm "${data.conversation.name}"`,
+        path: '/chat',
       });
     };
 
-    const handleGroupAdded = (data) => {
-      const { conversation, addedBy } = data;
-      if (!conversation) return;
+    // payload: { conversationId, addedUsers, addedBy, conversation }
+    const onGroupAdded = (data) => {
+      if (!data?.conversation) return;
       addToast({
         type: 'group_added',
         title: 'Được thêm vào nhóm',
-        message: `${addedBy?.name || 'Ai đó'} đã thêm bạn vào nhóm "${conversation.name}"`,
-        onClick: () => onNavigate?.('/chat', conversation),
+        message: `${data.addedBy?.name || 'Ai đó'} đã thêm bạn vào nhóm "${data.conversation.name}"`,
+        path: '/chat',
       });
     };
 
-    const handleGroupRemoved = (data) => {
-      const { conversationId, removedBy } = data;
+    // payload: { conversationId, removedUserIds, removedBy, conversation }
+    const onGroupRemoved = (data) => {
       addToast({
         type: 'group_removed',
         title: 'Bị xóa khỏi nhóm',
-        message: `${removedBy?.name || 'Quản trị viên'} đã xóa bạn khỏi nhóm`,
+        message: `${data?.removedBy?.name || 'Quản trị viên'} đã xóa bạn khỏi nhóm`,
       });
     };
 
-    const handleGroupLeftSelf = (data) => {
-      // Silent — user tự rời, không cần toast
-    };
+    // payload: { conversationId, leftUser, conversation } — tự rời, silent
+    const onGroupLeftSelf = (_data) => {};
 
-    const handleGroupRoleChanged = (data) => {
-      const { targetUser, newRole, changedBy, conversation: conv } = data;
-      if (!targetUser || targetUser._id !== currentUserId) return;
-      const roleLabel = newRole === 'admin' ? 'Quản trị viên' : 'Thành viên';
+    // payload: { conversationId, targetUser, changedBy, newRole, conversation }
+    const onGroupRoleChanged = (data) => {
+      if (!data?.targetUser || data.targetUser._id !== currentUserId) return;
+      const roleLabel = data.newRole === 'admin' ? 'Quản trị viên' : 'Thành viên';
       addToast({
         type: 'group_role',
         title: 'Thay đổi vai trò',
-        message: `Bạn đã được ${newRole === 'admin' ? 'thăng lên' : 'hạ xuống'} ${roleLabel} trong nhóm "${conv?.name || ''}"`,
-        onClick: () => onNavigate?.('/chat', conv),
+        message: `Bạn đã được ${data.newRole === 'admin' ? 'thăng lên' : 'hạ xuống'} ${roleLabel} trong "${data.conversation?.name || 'nhóm'}"`,
+        path: '/chat',
       });
     };
 
-    const handleGroupJoinRequested = (data) => {
+    // payload: { conversationId, request } — chỉ admin/owner nhận
+    const onGroupJoinRequested = (data) => {
       if (!data?.request) return;
-      const { request } = data;
       addToast({
         type: 'group_request',
         title: 'Yêu cầu tham gia nhóm',
-        message: `${request.actor?.name || 'Ai đó'} muốn thêm ${request.userId?.name || 'người dùng'} vào nhóm`,
+        message: `${data.request.actor?.name || 'Ai đó'} muốn thêm người vào nhóm`,
         duration: 7000,
+        path: '/chat',
       });
     };
 
-    const handleGroupRequestAdded = (data) => {
+    // payload: { conversationId, requestId, action, handledBy, conversation }
+    const onGroupRequestAdded = (data) => {
       if (!data?.conversation) return;
-      const { conversation: conv } = data;
       addToast({
         type: 'group_added',
         title: 'Yêu cầu được chấp nhận',
-        message: `Bạn đã được thêm vào nhóm "${conv.name}"`,
-        onClick: () => onNavigate?.('/chat', conv),
+        message: `Bạn đã được thêm vào nhóm "${data.conversation.name}"`,
+        path: '/chat',
       });
     };
 
-    socketService.on('friend_request_received', handleFriendRequest);
-    socketService.on('friend_request_accepted', handleFriendAccepted);
-    socketService.on('friend_request_rejected', handleFriendRejected);
-    socketService.on('group_created', handleGroupCreated);
-    socketService.on('group_added', handleGroupAdded);
-    socketService.on('group_removed', handleGroupRemoved);
-    socketService.on('group_left_self', handleGroupLeftSelf);
-    socketService.on('group_role_changed', handleGroupRoleChanged);
-    socketService.on('group_join_requested', handleGroupJoinRequested);
-    socketService.on('group_request_added', handleGroupRequestAdded);
+    // payload: { message, conversation: conversationId, mentions: [userId,...] }
+    const onMentionReceived = (data) => {
+      if (!data?.message) return;
+      const senderName = data.message.senderId?.name || 'Ai đó';
+      const preview = data.message.content?.slice(0, 50) || '';
+      addToast({
+        type: 'mention',
+        title: `${senderName} đã nhắc đến bạn`,
+        message: preview || 'Nhắn một điều gì đó...',
+        path: '/chat',
+        duration: 6000,
+      });
+    };
+
+    socketService.on('friend_request_received', onFriendRequest);
+    socketService.on('friend_request_accepted', onFriendAccepted);
+    socketService.on('friend_request_rejected', onFriendRejected);
+    socketService.on('group_created', onGroupCreated);
+    socketService.on('group_added', onGroupAdded);
+    socketService.on('group_removed', onGroupRemoved);
+    socketService.on('group_left_self', onGroupLeftSelf);
+    socketService.on('group_role_changed', onGroupRoleChanged);
+    socketService.on('group_join_requested', onGroupJoinRequested);
+    socketService.on('group_request_added', onGroupRequestAdded);
+    socketService.on('mention_received', onMentionReceived);
 
     return () => {
-      socketService.off('friend_request_received', handleFriendRequest);
-      socketService.off('friend_request_accepted', handleFriendAccepted);
-      socketService.off('friend_request_rejected', handleFriendRejected);
-      socketService.off('group_created', handleGroupCreated);
-      socketService.off('group_added', handleGroupAdded);
-      socketService.off('group_removed', handleGroupRemoved);
-      socketService.off('group_left_self', handleGroupLeftSelf);
-      socketService.off('group_role_changed', handleGroupRoleChanged);
-      socketService.off('group_join_requested', handleGroupJoinRequested);
-      socketService.off('group_request_added', handleGroupRequestAdded);
+      socketService.off('friend_request_received', onFriendRequest);
+      socketService.off('friend_request_accepted', onFriendAccepted);
+      socketService.off('friend_request_rejected', onFriendRejected);
+      socketService.off('group_created', onGroupCreated);
+      socketService.off('group_added', onGroupAdded);
+      socketService.off('group_removed', onGroupRemoved);
+      socketService.off('group_left_self', onGroupLeftSelf);
+      socketService.off('group_role_changed', onGroupRoleChanged);
+      socketService.off('group_join_requested', onGroupJoinRequested);
+      socketService.off('group_request_added', onGroupRequestAdded);
+      socketService.off('mention_received', onMentionReceived);
     };
-  }, [currentUserId]);
+  }, [currentUserId, addToast]);
 
   if (toasts.length === 0) return null;
 
   return (
     <>
       <style>{`
-        @keyframes slideIn {
+        @keyframes toastIn {
           from { transform: translateX(100%); opacity: 0; }
           to   { transform: translateX(0);   opacity: 1; }
         }
       `}</style>
       <div style={{
         position: 'fixed', bottom: 24, right: 24,
-        display: 'flex', flexDirection: 'column', gap: 10,
-        zIndex: 99999,
+        display: 'flex', flexDirection: 'column-reverse', gap: 10,
+        zIndex: 99999, pointerEvents: 'none',
       }}>
         {toasts.map(toast => (
-          <Toast key={toast.id} toast={toast} onRemove={removeToast} onNavigate={onNavigate} />
+          <div key={toast.id} style={{ pointerEvents: 'auto' }}>
+            <Toast toast={toast} onRemove={removeToast} onNavigate={onNavigate} />
+          </div>
         ))}
       </div>
     </>

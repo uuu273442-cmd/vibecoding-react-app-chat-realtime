@@ -22,7 +22,6 @@ export default function ChatLayout() {
   const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const [mentionToast, setMentionToast] = useState(null); // { senderName, content, convId }
   const plusMenuRef = useRef(null);
   const selectedConvRef = useRef(null);
 
@@ -30,11 +29,6 @@ export default function ChatLayout() {
   useEffect(() => { selectedConvRef.current = selectedConversation; }, [selectedConversation]);
 
   const currentUserId = getCurrentUserId();
-
-  const showMentionToast = (senderName, content, convId) => {
-    setMentionToast({ senderName, content, convId });
-    setTimeout(() => setMentionToast(null), 4000);
-  };
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -55,7 +49,7 @@ export default function ChatLayout() {
   useEffect(() => {
     socketService.connect();
     fetchConversations();
-    return () => { socketService.disconnect(); };
+    return () => { /* socket lifecycle managed by MainLayout */ };
   }, []);
 
   // ── Register group socket handlers ──────────────────────────────────────
@@ -138,8 +132,6 @@ export default function ChatLayout() {
           : c
       ));
       // Toast notification
-      const senderName = message.senderId?.name || 'Ai đó';
-      showMentionToast(senderName, message.content, convId);
     };
 
     socketService.onGroupCreated(handleGroupCreated);
@@ -279,25 +271,6 @@ export default function ChatLayout() {
       <NewChatModal isOpen={isNewChatModalOpen} onClose={() => setIsNewChatModalOpen(false)} onConversationCreated={handleConversationCreated} />
       <CreateGroupModal isOpen={isCreateGroupModalOpen} onClose={() => setIsCreateGroupModalOpen(false)} onGroupCreated={handleGroupCreated} />
 
-      {/* Mention Toast */}
-      {mentionToast && (
-        <div style={mentionToastStyle.wrap} onClick={() => {
-          const conv = conversations.find(c => c._id === mentionToast.convId);
-          if (conv) setSelectedConversation(conv);
-          setMentionToast(null);
-        }}>
-          <div style={mentionToastStyle.icon}>@</div>
-          <div style={mentionToastStyle.body}>
-            <p style={mentionToastStyle.title}>{mentionToast.senderName} đã nhắc đến bạn</p>
-            <p style={mentionToastStyle.text}>
-              {mentionToast.content?.length > 60
-                ? mentionToast.content.slice(0, 60) + '...'
-                : mentionToast.content}
-            </p>
-          </div>
-          <button style={mentionToastStyle.close} onClick={e => { e.stopPropagation(); setMentionToast(null); }}>✕</button>
-        </div>
-      )}
     </div>
   );
 }
@@ -305,31 +278,4 @@ export default function ChatLayout() {
 const plusMenuStyle = {
   menu: { position: 'absolute', right: 0, top: '100%', marginTop: 6, backgroundColor: 'white', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 6, minWidth: 180, zIndex: 100, border: '1px solid #f3f4f6' },
   item: { display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 14px', border: 'none', backgroundColor: 'transparent', cursor: 'pointer', fontSize: 14, color: '#374151', borderRadius: 7, textAlign: 'left' },
-};
-
-const mentionToastStyle = {
-  wrap: {
-    position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
-    display: 'flex', alignItems: 'center', gap: 10,
-    backgroundColor: 'white',
-    border: '1px solid #e5e7eb',
-    borderLeft: '4px solid #7c3aed',
-    borderRadius: 12,
-    padding: '12px 14px',
-    boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-    cursor: 'pointer',
-    maxWidth: 320,
-    animation: 'slideIn 0.3s ease',
-  },
-  icon: {
-    width: 36, height: 36, borderRadius: '50%',
-    background: 'linear-gradient(135deg,#667eea,#764ba2)',
-    color: 'white', fontWeight: 800, fontSize: 16,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    flexShrink: 0,
-  },
-  body: { flex: 1, minWidth: 0 },
-  title: { fontSize: 13, fontWeight: 700, color: '#7c3aed', margin: 0, marginBottom: 2 },
-  text: { fontSize: 12, color: '#374151', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  close: { background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 14, padding: '2px 4px', flexShrink: 0 },
 };

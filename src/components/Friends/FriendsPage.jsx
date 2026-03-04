@@ -62,10 +62,15 @@ export default function FriendsPage() {
     // Thêm vào danh sách requests (tránh duplicate)
     setRequests(prev => prev.some(r => r._id === request._id) ? prev : [request, ...prev]);
 
+    // request.from là string ID (chưa populate) → hiển thị "Lời mời kết bạn mới"
+    const senderName = typeof request.from === 'object'
+      ? (request.from.name || 'Ai đó')
+      : 'Ai đó';
+
     showToast({
       type: 'friend_request_received',
       title: 'Lời mời kết bạn mới',
-      message: `${request.from?.name || 'Ai đó'} muốn kết bạn với bạn`,
+      message: `${senderName} muốn kết bạn với bạn`,
     });
 
     playNotificationSound();

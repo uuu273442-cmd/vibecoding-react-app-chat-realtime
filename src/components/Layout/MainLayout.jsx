@@ -7,6 +7,7 @@ import { logoutUser } from '../../services/authService';
 import { getFriendRequests } from '../../services/friendsService';
 import { mainLayoutStyles as styles } from '../../styles/layoutStyles';
 import socketService from '../../services/socketService';
+import ToastNotification from '../ToastNotification';
 
 export default function MainLayout({ children }) {
   const navigate = useNavigate();
@@ -14,14 +15,16 @@ export default function MainLayout({ children }) {
   const [friendRequestsCount, setFriendRequestsCount] = useState(0);
 
   useEffect(() => {
-    // Fetch initial friend requests count
-    fetchFriendRequestsCount();
+    // Connect socket ngay khi user đã login và MainLayout mount
+    socketService.connect();
 
-    // Setup socket listeners for real-time updates
+    fetchFriendRequestsCount();
     setupSocketListeners();
 
     return () => {
       cleanupSocketListeners();
+      // KHÔNG disconnect ở đây — ChatLayout cũng dùng socket
+      // Disconnect chỉ xảy ra khi logout (handleLogout)
     };
   }, []);
 
@@ -29,21 +32,15 @@ export default function MainLayout({ children }) {
     try {
       const requests = await getFriendRequests();
       setFriendRequestsCount(requests.length);
-    } catch (error) {
-      console.error('Error fetching friend requests:', error);
-    }
+    } catch {}
   };
 
   const setupSocketListeners = () => {
-    // Nhận lời mời kết bạn mới → tăng badge
     socketService.onFriendRequestReceived((data) => {
       if (!data?.request) return;
       setFriendRequestsCount(prev => prev + 1);
     });
-
-    // Request được accept → không ảnh hưởng badge (badge chỉ đếm incoming requests)
     socketService.onFriendRequestAccepted((_data) => {});
-
     socketService.onFriendRequestRejected((_data) => {});
   };
 
@@ -54,73 +51,47 @@ export default function MainLayout({ children }) {
   };
 
   const handleLogout = async () => {
-    try {
-      await logoutUser();
-    } catch (error) {
-      console.error('Logout error:', error);
-    } finally {
-      navigate('/login');
-    }
+    // Disconnect socket TRƯỚC KHI clear token — đảm bảo sạch hoàn toàn
+    socketService.disconnect();
+    try { await logoutUser(); } catch {}
+    navigate('/login');
   };
 
   const handleNavClick = (path) => {
     navigate(path);
-    
-    // Reset badge count when navigating to Friends page
-    if (path === '/friends') {
-      setFriendRequestsCount(0);
-    }
+    if (path === '/friends') setFriendRequestsCount(0);
+  };
+
+  const handleToastNavigate = (path) => {
+    navigate(path || '/chat');
   };
 
   const navItems = [
-    {
-      icon: MessageCircle,
-      label: 'Chat',
-      path: '/chat',
-      badge: 0,
-    },
-    {
-      icon: Users,
-      label: 'Bạn bè',
-      path: '/friends',
-      badge: friendRequestsCount,
-    },
+    { icon: MessageCircle, label: 'Chat', path: '/chat', badge: 0 },
+    { icon: Users, label: 'Bạn bè', path: '/friends', badge: friendRequestsCount },
   ];
 
   return (
     <div style={styles.container}>
-      {/* Sidebar */}
       <div style={styles.sidebar}>
-        {/* Logo */}
         <div style={styles.logo}>
-          <div style={styles.logoIcon}>
-            <MessageCircle size={24} color="white" />
-          </div>
+          <div style={styles.logoIcon}><MessageCircle size={24} color="white" /></div>
         </div>
-
-        {/* Navigation */}
         <div style={styles.nav}>
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
-            
             return (
               <button
                 key={item.path}
                 onClick={() => handleNavClick(item.path)}
-                style={{
-                  ...styles.navItem,
-                  ...(isActive ? styles.navItemActive : {})
-                }}
+                style={{ ...styles.navItem, ...(isActive ? styles.navItemActive : {}) }}
                 title={item.label}
               >
-                {/* Icon with badge */}
                 <div style={styles.iconWrapper}>
                   <Icon size={24} />
                   {item.badge > 0 && (
-                    <div style={styles.badge}>
-                      {item.badge > 99 ? '99+' : item.badge}
-                    </div>
+                    <div style={styles.badge}>{item.badge > 99 ? '99+' : item.badge}</div>
                   )}
                 </div>
                 <span style={styles.navLabel}>{item.label}</span>
@@ -128,23 +99,17 @@ export default function MainLayout({ children }) {
             );
           })}
         </div>
-
-        {/* Logout */}
         <div style={styles.sidebarFooter}>
-          <button
-            onClick={handleLogout}
-            style={styles.logoutButton}
-            title="Đăng xuất"
-          >
+          <button onClick={handleLogout} style={styles.logoutButton} title="Đăng xuất">
             <LogOut size={24} />
           </button>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div style={styles.mainContent}>
-        {children}
-      </div>
+      <div style={styles.mainContent}>{children}</div>
+
+      {/* Toast notifications — mounted once at layout level */}
+      <ToastNotification onNavigate={handleToastNavigate} />
     </div>
   );
 }

@@ -2,15 +2,22 @@
 
 // Get current user ID from token
 export const getCurrentUserId = () => {
+  // Luôn đọc fresh từ localStorage mỗi lần gọi — không bao giờ stale
+  try {
+    // Ưu tiên currentUser object (lưu lúc login)
+    const raw = localStorage.getItem('currentUser');
+    if (raw) {
+      const user = JSON.parse(raw);
+      if (user?._id) return user._id;
+    }
+  } catch {}
+  // Fallback: decode JWT
   const token = localStorage.getItem('accessToken');
   if (!token) return null;
-  
   try {
-    // Decode JWT token để lấy user ID
     const payload = JSON.parse(atob(token.split('.')[1]));
-    return payload.sub; // 'sub' là user ID trong JWT
-  } catch (error) {
-    console.error('Error decoding token:', error);
+    return payload.sub || payload.id || payload._id || null;
+  } catch {
     return null;
   }
 };
