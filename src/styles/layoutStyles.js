@@ -10,7 +10,7 @@ export const mainLayoutStyles = {
   // Sidebar
   sidebar: {
     width: '80px',
-    backgroundColor: '#1f2937',
+    backgroundColor: 'var(--bg-sidebar-nav, #1f2937)',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -50,7 +50,7 @@ export const mainLayoutStyles = {
     backgroundColor: 'transparent',
     border: 'none',
     borderRadius: '12px',
-    color: '#9ca3af',
+    color: 'var(--nav-text, #9ca3af)',
     cursor: 'pointer',
     display: 'flex',
     flexDirection: 'column',
@@ -62,8 +62,8 @@ export const mainLayoutStyles = {
   },
 
   navItemActive: {
-    backgroundColor: 'rgba(118, 75, 162, 0.1)',
-    color: '#a78bfa',
+    backgroundColor: 'var(--accent-nav-bg, rgba(118,75,162,0.1))',
+    color: 'var(--accent)',
   },
 
   navLabel: {
@@ -95,7 +95,7 @@ export const mainLayoutStyles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    border: '2px solid #1f2937',
+    border: '2px solid var(--bg-sidebar-nav, #1f2937)',
     boxShadow: '0 2px 8px rgba(239, 68, 68, 0.4)',
   },
 
@@ -112,7 +112,7 @@ export const mainLayoutStyles = {
     backgroundColor: 'transparent',
     border: 'none',
     borderRadius: '12px',
-    color: '#9ca3af',
+    color: 'var(--nav-text, #9ca3af)',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',

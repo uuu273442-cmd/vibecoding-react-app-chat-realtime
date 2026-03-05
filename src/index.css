@@ -20,6 +20,9 @@
   --accent-light:      #ede9fe;
   --shadow:            rgba(0,0,0,0.08);
   --online:            #22c55e;
+  --bg-sidebar-nav:    #1e1b4b;
+  --nav-text:          #9ca3af;
+  --accent-nav-bg:     rgba(167,139,250,0.15);
 }
 
 @keyframes emojiIn {

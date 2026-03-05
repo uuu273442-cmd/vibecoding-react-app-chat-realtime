@@ -44,7 +44,7 @@ export default function ConversationList({ conversations, selectedConversation, 
                 <img src={avatar} alt="" style={styles.avatar} />
               ) : (
                 <div style={styles.avatarPlaceholder}>
-                  <User size={24} color="#9ca3af" />
+                  <User size={24} color="var(--text-secondary)" />
                 </div>
               )}
               {/* Online status indicator */}
