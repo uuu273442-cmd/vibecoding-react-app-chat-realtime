@@ -2,7 +2,7 @@
 // UPDATED: Phase 2 socket - group_member_added, group_member_removed, group_member_left, group_role_changed, group_join_requested, group_request_handled
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Send, Search as SearchIcon, Info, ArrowLeft, Users, UserPlus } from 'lucide-react';
+import { User, Send, Search as SearchIcon, Info, ArrowLeft, Users, UserPlus, Image } from 'lucide-react';
 import {
   getMessages, getMoreMessages, markMessagesSeen,
   addReaction, removeReaction, sendMessageWithReply,
@@ -31,7 +31,12 @@ import GroupInfo from './GroupInfo';
 import GroupMembersManager from './GroupMembersManager';
 import MentionInput from './MentionInput';
 import AnnouncementBanner from './AnnouncementBanner';
+import RichTextEditor from './RichTextEditor';
+import WallpaperSelector from '../Settings/WallpaperSelector';
 import socketService from '../../services/socketService';
+import { useTheme } from '../../contexts/ThemeContext';
+import { getWallpaperStyle } from '../../services/themeService';
+import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 
 // Helper: merge conversation data, preserve userId objects when socket sends only id strings
 const mergeConversation = (prev, updated) => {
@@ -86,6 +91,11 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
   // ── Mention state ─────────────────────────────────────────────────────────
   const [mentionIds, setMentionIds] = useState([]);
 
+  // ── Theme & Wallpaper ─────────────────────────────────────────────────────
+  const { getWallpaper } = useTheme();
+  const [showWallpaperSelector, setShowWallpaperSelector] = useState(false);
+  const wallpaperStyle = getWallpaperStyle(getWallpaper(conversation?._id));
+
   // ── Conversation state (local copy for realtime updates) ─────────────────
   const [localConversation, setLocalConversation] = useState(conversation);
 
@@ -100,6 +110,36 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
 
   const currentUserId = getCurrentUserId();
   const isGroup = localConversation?.type === 'group';
+
+  // ↑ → edit last own message (when input is empty)
+  useKeyboardShortcuts([
+    {
+      key: 'ArrowUp',
+      allowInInput: true,
+      action: () => {
+        if (inputMessage) return; // chỉ khi input trống
+        const lastOwn = [...messages].reverse().find(m => {
+          if (m.type === 'system' || m.isDeleted) return false;
+          const sid = typeof m.senderId === 'string' ? m.senderId : m.senderId?._id;
+          return sid === currentUserId && m.type !== 'file' && m.type !== 'media' && m.type !== 'voice';
+        });
+        if (lastOwn) setEditingMessage(lastOwn);
+      },
+    },
+    {
+      key: 'Escape',
+      action: () => {
+        setContextMenu(null);
+        setEditingMessage(null);
+        setDeletingMessage(null);
+        setForwardingMessage(null);
+        setReplyTo(null);
+        setShowWallpaperSelector(false);
+        setIsFileUploadOpen(false);
+        setIsMediaUploadOpen(false);
+      },
+    },
+  ], [inputMessage, messages]);
 
   // Sync localConversation when prop changes (different chat selected)
   useEffect(() => {
@@ -252,12 +292,6 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
       setMessages(prev => prev.map(m => m._id === messageId ? { ...m, isPinned: false, pinByUser: null, pinnedAt: null } : m));
     };
 
-    // Notification khi bị mention trong nhóm
-    const handleMentionReceived = ({ message, conversationId: convId }) => {
-      // Nếu đang ở đúng conversation → message đã được add qua new_message
-      // Nếu ở conversation khác → ChatLayout xử lý toast + badge
-    };
-
     // Admin tạo announcement mới → reload banner
     const handleAnnouncementCreated = (data) => {
       if (!data?.announcement) return;
@@ -347,7 +381,6 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
     socketService.on('new_message_linkPreview', handleLinkPreview);
     socketService.on('message_pinned', handleMessagePinned);
     socketService.on('message_unpinned', handleMessageUnpinned);
-    socketService.on('mention_received', handleMentionReceived);
     socketService.on('announcement_created', handleAnnouncementCreated);
     // Group
     socketService.on('group_member_added', handleGroupMemberAdded);
@@ -374,7 +407,6 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
       socketService.off('new_message_linkPreview', handleLinkPreview);
       socketService.off('message_pinned', handleMessagePinned);
       socketService.off('message_unpinned', handleMessageUnpinned);
-      socketService.off('mention_received', handleMentionReceived);
       socketService.off('announcement_created', handleAnnouncementCreated);
       socketService.off('group_member_added', handleGroupMemberAdded);
       socketService.off('group_member_removed', handleGroupMemberRemoved);
@@ -610,8 +642,11 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
           </div>
         </div>
         <div style={{ display: 'flex', gap: 4 }}>
-          <button onClick={() => setShowSearch(true)} style={styles.moreButton} title="Tìm kiếm">
+          <button onClick={() => setShowSearch(true)} style={styles.moreButton} title="Tìm kiếm (Ctrl+K)">
             <SearchIcon size={20} />
+          </button>
+          <button onClick={() => setShowWallpaperSelector(true)} style={styles.moreButton} title="Hình nền chat">
+            <Image size={20} />
           </button>
           {isGroup && (
             <button onClick={() => setShowAddMembers(true)} style={styles.moreButton} title="Thêm thành viên">
@@ -645,7 +680,7 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
       )}
 
       {/* Messages */}
-      <div ref={messagesContainerRef} id="messages-container" style={styles.messagesContainer}>
+      <div ref={messagesContainerRef} id="messages-container" style={{ ...styles.messagesContainer, ...wallpaperStyle }}>
         {isLoading ? (
           <div style={styles.loadingContainer}>
             <div style={styles.spinner}>⟳</div>
@@ -743,9 +778,15 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
             placeholder="Nhập tin nhắn... (@mention)"
           />
         ) : (
-          <input ref={inputRef} type="text" placeholder="Nhập tin nhắn..." value={inputMessage}
-            onChange={e => handleInputChange(e.target.value)}
-            onKeyPress={handleKeyPress} style={styles.input} disabled={isSending} />
+          <RichTextEditor
+            inputRef={inputRef}
+            value={inputMessage}
+            onChange={(text) => handleInputChange(text)}
+            onKeyDown={handleKeyPress}
+            disabled={isSending}
+            style={styles.input}
+            placeholder="Nhập tin nhắn... (Ctrl+B bold, Ctrl+I italic)"
+          />
         )}
         <button onClick={handleSendMessage} disabled={!inputMessage.trim() || isSending}
           style={{ ...styles.sendButton, ...((!inputMessage.trim() || isSending) ? styles.sendButtonDisabled : {}) }}>
@@ -769,6 +810,12 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
       {isVoiceRecording && <VoiceRecorder onRecordingComplete={handleVoiceUpload} onCancel={() => setIsVoiceRecording(false)} />}
       {isUploading && <UploadProgress progress={uploadProgress} fileName={uploadingFileName} />}
       {showSearch && <MessageSearch conversationId={conversation._id} onResultClick={handleJumpToMessage} onClose={() => setShowSearch(false)} />}
+      {showWallpaperSelector && (
+        <WallpaperSelector
+          conversationId={conversation._id}
+          onClose={() => setShowWallpaperSelector(false)}
+        />
+      )}
 
       {/* Group Info — giữ nguyên khi action, chỉ đóng khi close/leave */}
       {showGroupInfo && (

@@ -5,6 +5,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { UserPlus, UserCheck, UserX, Users, LogOut, Shield, Bell, X, AtSign } from 'lucide-react';
 import socketService from '../services/socketService';
 import { getCurrentUserId } from '../utils/chatHelpers';
+import { getActiveConversationId } from '../services/activeConversation';
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
 function useToast() {
@@ -209,12 +210,18 @@ export default function ToastNotification({ onNavigate }) {
     // payload: { message, conversation: conversationId, mentions: [userId,...] }
     const onMentionReceived = (data) => {
       if (!data?.message) return;
+      const convId = data.conversation;
+
+      // Nếu user đang mở đúng conversation được mention → KHÔNG toast
+      // (message đã hiển thị trực tiếp trên màn hình)
+      if (convId && convId === getActiveConversationId()) return;
+
       const senderName = data.message.senderId?.name || 'Ai đó';
-      const preview = data.message.content?.slice(0, 50) || '';
+      const preview = data.message.content?.slice(0, 60) || '';
       addToast({
         type: 'mention',
         title: `${senderName} đã nhắc đến bạn`,
-        message: preview || 'Nhắn một điều gì đó...',
+        message: preview || '...',
         path: '/chat',
         duration: 6000,
       });

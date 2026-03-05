@@ -2,7 +2,7 @@
 // UPDATED: Phase 2 socket - group_created, group_added, group_removed, group_left_self, group_request_added
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { MessageCircle, Search, Plus, Users } from 'lucide-react';
+import { MessageCircle, Search, Plus, Users, Palette } from 'lucide-react';
 import { getConversations } from '../../services/chatService';
 import ConversationList from './ConversationList';
 import NewChatModal from './NewChatModal';
@@ -11,6 +11,9 @@ import ChatWindow from './ChatWindow';
 import { chatLayoutStyles as styles } from '../../styles/chatStyles';
 import socketService from '../../services/socketService';
 import { getCurrentUserId } from '../../utils/chatHelpers';
+import { setActiveConversationId } from '../../services/activeConversation';
+import ThemeSettings from '../Settings/ThemeSettings';
+import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 
 export default function ChatLayout() {
   const [conversations, setConversations] = useState([]);
@@ -21,12 +24,22 @@ export default function ChatLayout() {
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
   const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
+  const [showTheme, setShowTheme] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const plusMenuRef = useRef(null);
   const selectedConvRef = useRef(null);
 
   // Keep ref in sync so socket handlers can read latest value
   useEffect(() => { selectedConvRef.current = selectedConversation; }, [selectedConversation]);
+  // Sync module-level active ID — dùng bởi ToastNotification để tránh notify trùng
+  useEffect(() => { setActiveConversationId(selectedConversation?._id); }, [selectedConversation?._id]);
+
+  // ── Keyboard shortcuts ──────────────────────────────────────────────────
+  useKeyboardShortcuts([
+    { key: 'k',   ctrl: true, action: () => document.querySelector('[data-search-input]')?.focus() },
+    { key: 'n',   ctrl: true, action: () => setIsNewChatModalOpen(true) },
+    { key: 'Escape', action: () => { setIsNewChatModalOpen(false); setIsCreateGroupModalOpen(false); setShowTheme(false); } },
+  ], []);
 
   const currentUserId = getCurrentUserId();
 
@@ -123,15 +136,15 @@ export default function ChatLayout() {
     const handleMentionReceived = (data) => {
       const { message, conversation: convId } = data;
       if (!message || !convId) return;
-      // Nếu đang mở đúng conversation đó → không cần notify thêm
+      // Nếu đang mở đúng conversation → message đã hiện, không cần badge
       if (selectedConvRef.current?._id === convId) return;
-      // Bump unreadCount + badge cho conversation đó trong sidebar
+      // Bump unreadCount + đánh dấu hasMention cho conversation trong sidebar
       setConversations(prev => prev.map(c =>
         c._id === convId
           ? { ...c, unreadCount: (c.unreadCount || 0) + 1, hasMention: true }
           : c
       ));
-      // Toast notification
+      // Toast được xử lý bởi ToastNotification — không duplicate ở đây
     };
 
     socketService.onGroupCreated(handleGroupCreated);
@@ -210,30 +223,41 @@ export default function ChatLayout() {
         <div style={{ ...styles.sidebar, ...(isMobile ? { width: '100%', height: '100%' } : {}) }}>
           <div style={styles.sidebarHeader}>
             <div style={styles.logoSection}>
-              <MessageCircle size={28} color="#764ba2" />
+              <MessageCircle size={28} color="var(--accent)" />
               <h2 style={styles.appTitle}>Tin nhắn</h2>
             </div>
-            <div ref={plusMenuRef} style={{ position: 'relative' }}>
-              <button onClick={() => setShowPlusMenu(!showPlusMenu)} style={styles.newChatButton}>
-                <Plus size={18} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <button onClick={() => setShowTheme(true)} style={iconBtn} title="Giao diện (Theme)">
+                <Palette size={18} color="var(--text-secondary)" />
               </button>
-              {showPlusMenu && (
-                <div style={plusMenuStyle.menu}>
-                  <button onClick={() => { setIsNewChatModalOpen(true); setShowPlusMenu(false); }} style={plusMenuStyle.item}>
-                    <MessageCircle size={16} color="#764ba2" /><span>Tin nhắn mới</span>
-                  </button>
-                  <button onClick={() => { setIsCreateGroupModalOpen(true); setShowPlusMenu(false); }} style={plusMenuStyle.item}>
-                    <Users size={16} color="#10b981" /><span>Tạo nhóm</span>
-                  </button>
-                </div>
-              )}
+              <div ref={plusMenuRef} style={{ position: 'relative' }}>
+                <button onClick={() => setShowPlusMenu(!showPlusMenu)} style={styles.newChatButton}>
+                  <Plus size={18} />
+                </button>
+                {showPlusMenu && (
+                  <div style={plusMenuStyle.menu}>
+                    <button onClick={() => { setIsNewChatModalOpen(true); setShowPlusMenu(false); }} style={plusMenuStyle.item}>
+                      <MessageCircle size={16} color="var(--accent)" /><span>Tin nhắn mới</span>
+                    </button>
+                    <button onClick={() => { setIsCreateGroupModalOpen(true); setShowPlusMenu(false); }} style={plusMenuStyle.item}>
+                      <Users size={16} color="#10b981" /><span>Tạo nhóm</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
           <div style={styles.searchContainer}>
             <Search size={18} style={styles.searchIcon} />
-            <input type="text" placeholder="Tìm kiếm cuộc hội thoại..." value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)} style={styles.searchInput} />
+            <input
+              type="text"
+              data-search-input
+              placeholder="Tìm kiếm... (Ctrl+K)"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              style={styles.searchInput}
+            />
           </div>
 
           <div style={styles.conversationsContainer}>
@@ -270,12 +294,20 @@ export default function ChatLayout() {
 
       <NewChatModal isOpen={isNewChatModalOpen} onClose={() => setIsNewChatModalOpen(false)} onConversationCreated={handleConversationCreated} />
       <CreateGroupModal isOpen={isCreateGroupModalOpen} onClose={() => setIsCreateGroupModalOpen(false)} onGroupCreated={handleGroupCreated} />
+      {showTheme && <ThemeSettings onClose={() => setShowTheme(false)} />}
 
     </div>
   );
 }
 
+const iconBtn = {
+  background: 'none', border: 'none', cursor: 'pointer',
+  padding: 7, borderRadius: '50%',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  transition: 'background 0.15s',
+};
+
 const plusMenuStyle = {
-  menu: { position: 'absolute', right: 0, top: '100%', marginTop: 6, backgroundColor: 'white', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 6, minWidth: 180, zIndex: 100, border: '1px solid #f3f4f6' },
-  item: { display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 14px', border: 'none', backgroundColor: 'transparent', cursor: 'pointer', fontSize: 14, color: '#374151', borderRadius: 7, textAlign: 'left' },
+  menu: { position: 'absolute', right: 0, top: '100%', marginTop: 6, backgroundColor: 'var(--bg-sidebar)', borderRadius: 10, boxShadow: '0 8px 24px var(--shadow)', padding: 6, minWidth: 180, zIndex: 100, border: '1px solid var(--border)' },
+  item: { display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 14px', border: 'none', backgroundColor: 'transparent', cursor: 'pointer', fontSize: 14, color: 'var(--text-primary)', borderRadius: 7, textAlign: 'left' },
 };

@@ -9,50 +9,24 @@ import FriendsPage from './components/Friends/FriendsPage';
 import MainLayout from './components/Layout/MainLayout';
 import ProtectedRoute from './components/ProtectedRoute';
 import { setupAutoRefresh } from './utils/apiInterceptor';
+import { ThemeProvider } from './contexts/ThemeContext';
 
 function App() {
-  useEffect(() => {
-    // Setup automatic token refresh
-    setupAutoRefresh();
-  }, []);
+  useEffect(() => { setupAutoRefresh(); }, []);
 
   return (
-    <BrowserRouter>
-      <Routes>
-        {/* Route mặc định redirect về login */}
-        <Route path="/" element={<Navigate to="/login" replace />} />
-        
-        {/* Auth routes */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        
-        {/* Protected routes với MainLayout (sidebar) */}
-        <Route 
-          path="/chat" 
-          element={
-            <ProtectedRoute>
-              <MainLayout>
-                <ChatLayout />
-              </MainLayout>
-            </ProtectedRoute>
-          } 
-        />
-        
-        <Route 
-          path="/friends" 
-          element={
-            <ProtectedRoute>
-              <MainLayout>
-                <FriendsPage />
-              </MainLayout>
-            </ProtectedRoute>
-          } 
-        />
-        
-        {/* 404 - Not found */}
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
-    </BrowserRouter>
+    <ThemeProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/chat" element={<ProtectedRoute><MainLayout><ChatLayout /></MainLayout></ProtectedRoute>} />
+          <Route path="/friends" element={<ProtectedRoute><MainLayout><FriendsPage /></MainLayout></ProtectedRoute>} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </ThemeProvider>
   );
 }
 

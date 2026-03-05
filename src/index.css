@@ -2,6 +2,31 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
+/* ── Default CSS variables (light theme) ── */
+:root {
+  --bg-app:            #f0f2f5;
+  --bg-sidebar:        #ffffff;
+  --bg-chat:           #f0f2f5;
+  --bg-bubble-own:     linear-gradient(135deg,#667eea,#764ba2);
+  --bg-bubble-other:   #ffffff;
+  --bg-input:          #f0f2f5;
+  --bg-header:         #ffffff;
+  --text-primary:      #111827;
+  --text-secondary:    #6b7280;
+  --text-bubble-own:   #ffffff;
+  --text-bubble-other: #111827;
+  --border:            #e5e7eb;
+  --accent:            #764ba2;
+  --accent-light:      #ede9fe;
+  --shadow:            rgba(0,0,0,0.08);
+  --online:            #22c55e;
+}
+
+@keyframes emojiIn {
+  from { transform: scale(0.85) translateY(8px); opacity: 0; }
+  to   { transform: scale(1) translateY(0); opacity: 1; }
+}
+
 * {
   margin: 0;
   padding: 0;
