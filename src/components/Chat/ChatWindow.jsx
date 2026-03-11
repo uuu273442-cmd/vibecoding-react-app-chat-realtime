@@ -2,7 +2,7 @@
 // UPDATED: Phase 2 socket - group_member_added, group_member_removed, group_member_left, group_role_changed, group_join_requested, group_request_handled
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Send, Search as SearchIcon, Info, ArrowLeft, Users, UserPlus, Image } from 'lucide-react';
+import { User, Send, Search as SearchIcon, Info, ArrowLeft, Users, UserPlus, Image, BellOff, Bell, ShieldOff, Archive, MoreVertical } from 'lucide-react';
 import {
   getMessages, getMoreMessages, markMessagesSeen,
   addReaction, removeReaction, sendMessageWithReply,
@@ -33,10 +33,13 @@ import MentionInput from './MentionInput';
 import AnnouncementBanner from './AnnouncementBanner';
 import RichTextEditor from './RichTextEditor';
 import WallpaperSelector from '../Settings/WallpaperSelector';
+import BlockUserModal from './BlockUserModal';
+import MuteModal from './MuteModal';
 import socketService from '../../services/socketService';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getWallpaperStyle } from '../../services/themeService';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
+import { blockUser, unblockUser, archiveConversation, isMutedNow, getBlockedUsers } from '../../services/privacyService';
 
 // Helper: merge conversation data, preserve userId objects when socket sends only id strings
 const mergeConversation = (prev, updated) => {
@@ -96,6 +99,14 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
   const [showWallpaperSelector, setShowWallpaperSelector] = useState(false);
   const wallpaperStyle = getWallpaperStyle(getWallpaper(conversation?._id));
 
+  // ── Privacy: Block / Mute / Archive ──────────────────────────────────────
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showBlockModal, setShowBlockModal] = useState(false);
+  const [showMuteModal, setShowMuteModal] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [myParticipant, setMyParticipant] = useState(null);
+  const moreMenuRef = useRef(null);
+
   // ── Conversation state (local copy for realtime updates) ─────────────────
   const [localConversation, setLocalConversation] = useState(conversation);
 
@@ -145,6 +156,38 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
   useEffect(() => {
     setLocalConversation(conversation);
   }, [conversation?._id]);
+
+  // Sync myParticipant from localConversation
+  useEffect(() => {
+    if (!localConversation || !currentUserId) return;
+    const me = localConversation.participants?.find(p => {
+      const uid = typeof p.userId === 'string' ? p.userId : p.userId?._id;
+      return uid === currentUserId;
+    });
+    setMyParticipant(me || null);
+  }, [localConversation, currentUserId]);
+
+  // Fetch block status khi mở conversation (chỉ private)
+  useEffect(() => {
+    if (!localConversation || localConversation.type === 'group' || !currentUserId) {
+      setIsBlocked(false);
+      return;
+    }
+    // Lấy userId của người kia
+    const otherP = localConversation.participants?.find(p => {
+      const uid = typeof p.userId === 'string' ? p.userId : p.userId?._id;
+      return uid !== currentUserId;
+    });
+    if (!otherP) return;
+    const otherId = typeof otherP.userId === 'string' ? otherP.userId : otherP.userId?._id;
+    if (!otherId) return;
+
+    getBlockedUsers().then(list => {
+      // Check xem mình có đang block người kia không
+      const blocked = list.some(b => b.blockedId?._id === otherId);
+      setIsBlocked(blocked);
+    }).catch(() => {});
+  }, [localConversation?._id]);
 
   // ── Main effect: load messages + register ALL socket listeners ───────────
   useEffect(() => {
@@ -632,7 +675,10 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
             {!isGroup && status === 'online' && <div style={styles.onlineIndicator} />}
           </div>
           <div style={styles.userInfo}>
-            <h3 style={styles.userName}>{name}</h3>
+            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+              <h3 style={styles.userName}>{name}</h3>
+              {isMutedNow(myParticipant) && <BellOff size={13} color="var(--text-secondary)" title="Đang tắt thông báo" />}
+            </div>
             <p style={{ ...styles.userStatus, color: status === 'online' ? '#10b981' : '#6b7280' }}>
               {isGroup
                 ? `${localConversation.participants?.length || 0} thành viên`
@@ -656,6 +702,40 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
           <button onClick={() => setShowGroupInfo(true)} style={styles.moreButton} title="Thông tin">
             <Info size={20} />
           </button>
+          {/* More menu ⋮ */}
+          <div ref={moreMenuRef} style={{ position: 'relative' }}>
+            <button onClick={() => setShowMoreMenu(v => !v)} style={styles.moreButton} title="Thêm tùy chọn">
+              <MoreVertical size={20} />
+            </button>
+            {showMoreMenu && (
+              <div style={moreMenuStyle.menu}>
+                {/* Mute */}
+                <button style={moreMenuStyle.item} onClick={() => { setShowMuteModal(true); setShowMoreMenu(false); }}>
+                  {isMutedNow(myParticipant)
+                    ? <><Bell size={15} color="var(--accent)" /><span>Bật thông báo</span></>
+                    : <><BellOff size={15} color="var(--text-secondary)" /><span>Tắt thông báo</span></>
+                  }
+                </button>
+                {/* Archive */}
+                <button style={moreMenuStyle.item} onClick={async () => {
+                  setShowMoreMenu(false);
+                  try {
+                    await archiveConversation(conversation._id);
+                    onConversationUpdate?.(null); // back to list
+                  } catch {}
+                }}>
+                  <Archive size={15} color="var(--text-secondary)" /><span>Lưu trữ</span>
+                </button>
+                {/* Block — chỉ private chat */}
+                {!isGroup && (
+                  <button style={{ ...moreMenuStyle.item, color: isBlocked ? 'var(--accent)' : '#ef4444' }}
+                    onClick={() => { setShowBlockModal(true); setShowMoreMenu(false); }}>
+                    <ShieldOff size={15} /><span>{isBlocked ? 'Bỏ chặn' : 'Chặn người dùng'}</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -762,7 +842,14 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
       {/* Reply preview */}
       {replyTo && <ReplyPreview replyToMessage={replyTo} onCancel={() => setReplyTo(null)} />}
 
-      {/* Input */}
+      {/* Input / Block banner */}
+      {isBlocked ? (
+        <div style={blockedBannerStyle}>
+          <ShieldOff size={16} color="#ef4444" />
+          <span>Bạn không thể nhắn tin với người này</span>
+          <button onClick={() => setShowBlockModal(true)} style={unblockBtn}>Bỏ chặn</button>
+        </div>
+      ) : (
       <div style={styles.inputContainer}>
         <UploadButton onFileClick={() => setIsFileUploadOpen(true)} onMediaClick={() => setIsMediaUploadOpen(true)} onVoiceClick={() => setIsVoiceRecording(true)} />
         {isGroup ? (
@@ -793,6 +880,7 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
           {isSending ? <span style={styles.spinner}>⟳</span> : <Send size={20} />}
         </button>
       </div>
+      )}{/* end isBlocked ternary */}
 
       {/* Modals */}
       {contextMenu && (
@@ -814,6 +902,29 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
         <WallpaperSelector
           conversationId={conversation._id}
           onClose={() => setShowWallpaperSelector(false)}
+        />
+      )}
+      {showBlockModal && !isGroup && (() => {
+        const otherP = localConversation.participants?.find(p => {
+          const uid = typeof p.userId === 'string' ? p.userId : p.userId?._id;
+          return uid !== currentUserId;
+        });
+        const otherUser = otherP ? (typeof otherP.userId === 'object' ? otherP.userId : { _id: otherP.userId, name: 'Người dùng' }) : { _id: '', name: 'Người dùng' };
+        return (
+          <BlockUserModal
+            user={otherUser}
+            isBlocked={isBlocked}
+            onClose={() => setShowBlockModal(false)}
+            onDone={(nowBlocked) => setIsBlocked(nowBlocked)}
+          />
+        );
+      })()}
+      {showMuteModal && (
+        <MuteModal
+          conversationId={conversation._id}
+          currentParticipant={myParticipant}
+          onClose={() => setShowMuteModal(false)}
+          onDone={(updated) => setMyParticipant(prev => ({ ...prev, ...updated }))}
         />
       )}
 
@@ -853,4 +964,25 @@ export default function ChatWindow({ conversation, onBack, onConversationUpdate 
 const backBtnStyle = {
   background: 'none', border: 'none', cursor: 'pointer',
   color: '#6b7280', padding: '4px 8px 4px 0', display: 'flex', alignItems: 'center', flexShrink: 0,
+};
+
+const blockedBannerStyle = {
+  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+  padding: '14px 20px',
+  backgroundColor: '#fef2f2',
+  borderTop: '1px solid #fecaca',
+  color: '#ef4444',
+  fontSize: 14, fontWeight: 500,
+  flexShrink: 0,
+};
+
+const unblockBtn = {
+  background: 'none', border: '1px solid #ef4444', color: '#ef4444',
+  padding: '4px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+  marginLeft: 4,
+};
+
+const moreMenuStyle = {
+  menu: { position: 'absolute', right: 0, top: '100%', marginTop: 6, backgroundColor: 'var(--bg-sidebar)', borderRadius: 12, boxShadow: '0 8px 24px var(--shadow)', padding: 6, minWidth: 180, zIndex: 200, border: '1px solid var(--border)' },
+  item: { display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 14px', border: 'none', backgroundColor: 'transparent', cursor: 'pointer', fontSize: 14, color: 'var(--text-primary)', borderRadius: 8, textAlign: 'left' },
 };

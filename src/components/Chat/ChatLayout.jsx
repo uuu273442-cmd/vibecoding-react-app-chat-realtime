@@ -2,12 +2,13 @@
 // UPDATED: Phase 2 socket - group_created, group_added, group_removed, group_left_self, group_request_added
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { MessageCircle, Search, Plus, Users, Palette } from 'lucide-react';
+import { MessageCircle, Search, Plus, Users, Palette, Archive } from 'lucide-react';
 import { getConversations } from '../../services/chatService';
 import ConversationList from './ConversationList';
 import NewChatModal from './NewChatModal';
 import CreateGroupModal from './CreateGroupModal';
 import ChatWindow from './ChatWindow';
+import ArchivedChats from './ArchivedChats';
 import { chatLayoutStyles as styles } from '../../styles/chatStyles';
 import socketService from '../../services/socketService';
 import { getCurrentUserId } from '../../utils/chatHelpers';
@@ -25,6 +26,7 @@ export default function ChatLayout() {
   const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [showTheme, setShowTheme] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const plusMenuRef = useRef(null);
   const selectedConvRef = useRef(null);
@@ -275,6 +277,12 @@ export default function ChatLayout() {
               <ConversationList conversations={filteredConversations} selectedConversation={selectedConversation} onConversationClick={handleConversationClick} />
             )}
           </div>
+
+          {/* Archive button at bottom of sidebar */}
+          <button style={archiveBtnStyle} onClick={() => setShowArchived(true)}>
+            <Archive size={15} color="var(--text-secondary)" />
+            <span>Hội thoại đã lưu trữ</span>
+          </button>
         </div>
       )}
 
@@ -295,6 +303,15 @@ export default function ChatLayout() {
       <NewChatModal isOpen={isNewChatModalOpen} onClose={() => setIsNewChatModalOpen(false)} onConversationCreated={handleConversationCreated} />
       <CreateGroupModal isOpen={isCreateGroupModalOpen} onClose={() => setIsCreateGroupModalOpen(false)} onGroupCreated={handleGroupCreated} />
       {showTheme && <ThemeSettings onClose={() => setShowTheme(false)} />}
+      {showArchived && (
+        <ArchivedChats
+          onClose={() => setShowArchived(false)}
+          onConversationSelect={(conv) => {
+            setSelectedConversation(conv);
+            setShowArchived(false);
+          }}
+        />
+      )}
 
     </div>
   );
@@ -304,6 +321,15 @@ const iconBtn = {
   background: 'none', border: 'none', cursor: 'pointer',
   padding: 7, borderRadius: '50%',
   display: 'flex', alignItems: 'center', justifyContent: 'center',
+  transition: 'background 0.15s',
+};
+
+const archiveBtnStyle = {
+  display: 'flex', alignItems: 'center', gap: 8,
+  width: '100%', padding: '11px 20px',
+  border: 'none', borderTop: '1px solid var(--border)',
+  background: 'none', cursor: 'pointer',
+  color: 'var(--text-secondary)', fontSize: 13, fontWeight: 500,
   transition: 'background 0.15s',
 };
 
